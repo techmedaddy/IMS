@@ -1,0 +1,46 @@
+### OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+### Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+.venv/
+venv/
+ENV/
+env/
+
+### Env files / secrets
+.env
+.env.*
+!.env.example
+
+### Logs
+*.log
+
+### Node / Frontend
+node_modules/
+dist/
+.parcel-cache/
+.next/
+.nuxt/
+
+### Docker
+*.pid
+
+### Assignment artifacts (don’t commit prompt PDFs)
+Engineering_Assignment__Incident_Management_System.pdf
+*.pdf

@@ -1,0 +1,18 @@
+{% if incidents %}
+  <div class="incidents">
+    {% for i in incidents %}
+      <button
+        class="incident-row"
+        hx-get="/fragments/incidents/{{ i.id }}"
+        hx-target="#incident-detail"
+        hx-swap="innerHTML"
+      >
+        <span class="sev sev-{{ i.severity|lower }}">{{ i.severity }}</span>
+        <span class="component">{{ i.component_id }}</span>
+        <span class="meta">{{ i.component_type }} • {{ i.state.value }}</span>
+      </button>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty">No active incidents yet.</div>
+{% endif %}
