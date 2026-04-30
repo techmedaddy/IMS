@@ -26,3 +26,7 @@ def is_rca_complete(
             is_nonempty_text(prevention_steps),
         ]
     )
+
+
+def can_close_incident(*, rca_present: bool, rca_complete: bool) -> bool:
+    return rca_present and rca_complete

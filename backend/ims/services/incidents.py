@@ -18,7 +18,7 @@ from ims.cache import active_incident_key, cache_incident, incident_snapshot, re
 from ims.config import Settings
 from ims.db.models import RCA, WorkItem, WorkItemState
 from ims.domain.alerts import severity_rank
-from ims.domain.rca import is_rca_complete
+from ims.domain.rca import can_close_incident, is_rca_complete
 from ims.domain.state_machine import is_valid_transition
 
 
@@ -94,13 +94,18 @@ async def transition_incident(
 
     if to_state == WorkItemState.CLOSED:
         rca = incident.rca
-        if rca is None or not is_rca_complete(
-            start_time=rca.start_time,
-            end_time=rca.end_time,
-            root_cause_category=rca.root_cause_category,
-            fix_applied=rca.fix_applied,
-            prevention_steps=rca.prevention_steps,
-        ):
+        rca_complete = (
+            False
+            if rca is None
+            else is_rca_complete(
+                start_time=rca.start_time,
+                end_time=rca.end_time,
+                root_cause_category=rca.root_cause_category,
+                fix_applied=rca.fix_applied,
+                prevention_steps=rca.prevention_steps,
+            )
+        )
+        if not can_close_incident(rca_present=rca is not None, rca_complete=rca_complete):
             raise HTTPException(status_code=400, detail="RCA is missing or incomplete; cannot close incident")
 
     incident.state = to_state
