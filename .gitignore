@@ -44,3 +44,4 @@ dist/
 ### Assignment artifacts (don’t commit prompt PDFs)
 Engineering_Assignment__Incident_Management_System.pdf
 *.pdf
+AGENTS.md
