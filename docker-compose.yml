@@ -1,0 +1,139 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ims
+      POSTGRES_USER: ims
+      POSTGRES_PASSWORD: ims
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ims -d ims"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' | grep 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redpanda:
+    image: redpandadata/redpanda:v24.3.10
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - 1G
+      - --reserve-memory
+      - 0M
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:9092
+      - --pandaproxy-addr
+      - 0.0.0.0:8082
+      - --advertise-pandaproxy-addr
+      - redpanda:8082
+    ports:
+      - "9092:9092"
+      - "8082:8082"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      IMS_KAFKA_BOOTSTRAP: ${IMS_KAFKA_BOOTSTRAP:-redpanda:9092}
+      IMS_KAFKA_TOPIC_SIGNALS: ${IMS_KAFKA_TOPIC_SIGNALS:-ims.signals}
+      IMS_KAFKA_CONSUMER_GROUP: ${IMS_KAFKA_CONSUMER_GROUP:-ims-worker}
+      IMS_REDIS_URL: ${IMS_REDIS_URL:-redis://redis:6379/0}
+      IMS_POSTGRES_DSN: ${IMS_POSTGRES_DSN:-postgresql+asyncpg://ims:ims@postgres:5432/ims}
+      IMS_MONGO_URI: ${IMS_MONGO_URI:-mongodb://mongo:27017}
+      IMS_MONGO_DB: ${IMS_MONGO_DB:-ims}
+      IMS_DEBOUNCE_WINDOW_SECONDS: ${IMS_DEBOUNCE_WINDOW_SECONDS:-10}
+      IMS_DEBOUNCE_THRESHOLD: ${IMS_DEBOUNCE_THRESHOLD:-100}
+      IMS_RATE_LIMIT_PER_SEC_PER_IP: ${IMS_RATE_LIMIT_PER_SEC_PER_IP:-5000}
+      IMS_RATE_LIMIT_PER_SEC_GLOBAL: ${IMS_RATE_LIMIT_PER_SEC_GLOBAL:-20000}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["python", "-m", "ims.worker.main"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      IMS_KAFKA_BOOTSTRAP: ${IMS_KAFKA_BOOTSTRAP:-redpanda:9092}
+      IMS_KAFKA_TOPIC_SIGNALS: ${IMS_KAFKA_TOPIC_SIGNALS:-ims.signals}
+      IMS_KAFKA_CONSUMER_GROUP: ${IMS_KAFKA_CONSUMER_GROUP:-ims-worker}
+      IMS_REDIS_URL: ${IMS_REDIS_URL:-redis://redis:6379/0}
+      IMS_POSTGRES_DSN: ${IMS_POSTGRES_DSN:-postgresql+asyncpg://ims:ims@postgres:5432/ims}
+      IMS_MONGO_URI: ${IMS_MONGO_URI:-mongodb://mongo:27017}
+      IMS_MONGO_DB: ${IMS_MONGO_DB:-ims}
+      IMS_DEBOUNCE_WINDOW_SECONDS: ${IMS_DEBOUNCE_WINDOW_SECONDS:-10}
+      IMS_DEBOUNCE_THRESHOLD: ${IMS_DEBOUNCE_THRESHOLD:-100}
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pg_data:
+  mongo_data:
+  redis_data:
+  redpanda_data:
