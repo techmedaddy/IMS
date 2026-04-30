@@ -74,6 +74,30 @@ services:
       timeout: 5s
       retries: 30
 
+  redpanda-init:
+    image: redpandadata/redpanda:v24.3.10
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/sh"]
+    command:
+      - -c
+      - |
+        set -eu
+        BROKERS="redpanda:9092"
+        rpk -X "brokers=$$BROKERS" topic create ims.signals -p 3 -r 1 >/dev/null 2>&1 || true
+        PARTS="$$(rpk -X "brokers=$$BROKERS" topic describe ims.signals 2>/dev/null | awk '/^PARTITIONS/{print $$2}')"
+        if [ -z "$$PARTS" ]; then
+          echo "failed to read topic partitions"
+          exit 1
+        fi
+        if [ "$$PARTS" -lt 3 ]; then
+          ADD="$$(expr 3 - "$$PARTS")"
+          rpk -X "brokers=$$BROKERS" topic add-partitions ims.signals --num "$$ADD"
+        fi
+        rpk -X "brokers=$$BROKERS" topic describe ims.signals | awk '/^NAME|^PARTITIONS|^REPLICAS/{print}'
+    restart: "no"
+
   api:
     build:
       context: ./backend
@@ -102,8 +126,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      redpanda:
-        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health').read()\""]
       interval: 10s
