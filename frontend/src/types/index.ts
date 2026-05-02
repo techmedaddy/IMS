@@ -36,3 +36,10 @@ export interface IncidentDetail {
 export interface TransitionPayload {
   to_state: IncidentState;
 }
+
+export interface Metrics {
+  now: string;
+  open_incidents: number;
+  avg_mttr_seconds_last_hour: number | null;
+  signals_aggregated_last_hour: number;
+}

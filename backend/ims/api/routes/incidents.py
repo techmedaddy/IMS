@@ -53,7 +53,7 @@ async def incident_detail(
 
 
 @router.post("/incidents/{incident_id}/transition", response_model=IncidentOut)
-async def transition_incident(
+async def transition_incident_route(
     incident_id: uuid.UUID,
     body: TransitionIn,
     settings: Settings = Depends(get_settings),

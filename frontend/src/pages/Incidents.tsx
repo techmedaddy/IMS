@@ -2,38 +2,30 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Filter, ArrowUpRight } from 'lucide-react';
 import { incidentsApi } from '@/src/api/incidents';
-import { metricsApi } from '@/src/api/metrics';
-import { Incident, Metrics } from '@/src/types';
+import { Incident } from '@/src/types';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/src/components/ui/Table';
 import { Card, CardContent } from '@/src/components/ui/Card';
 import { Input } from '@/src/components/ui/Form';
 import { SeverityBadge, StatusBadge } from '@/src/components/ui/Badge';
-import { formatDuration, cn } from '@/src/lib/utils';
+import { formatDuration } from '@/src/lib/utils';
 import { format } from 'date-fns';
 
-export function Dashboard() {
+export function Incidents() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchIncidents = async () => {
       try {
-        const [incidentsData, metricsData] = await Promise.all([
-          incidentsApi.list(),
-          metricsApi.get()
-        ]);
-        
-        // Sort: P0 first, then by updated_at desc
-        const sortedData = [...incidentsData].sort((a, b) => {
+        const data = await incidentsApi.list();
+        const sortedData = [...data].sort((a, b) => {
           if (a.severity === 'P0' && b.severity !== 'P0') return -1;
           if (a.severity !== 'P0' && b.severity === 'P0') return 1;
           return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
         });
         setIncidents(sortedData);
-        setMetrics(metricsData);
       } catch (error) {
         console.error('Failed to fetch incidents', error);
       } finally {
@@ -41,49 +33,39 @@ export function Dashboard() {
       }
     };
 
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // Polling every 30s
+    fetchIncidents();
+    const interval = setInterval(fetchIncidents, 30000);
     return () => clearInterval(interval);
   }, []);
 
   const filteredIncidents = incidents.filter(idx => 
     idx.component_id.toLowerCase().includes(search.toLowerCase()) ||
-    idx.id.toLowerCase().includes(search.toLowerCase())
+    idx.id.toLowerCase().includes(search.toLowerCase()) ||
+    idx.state.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">System Dashboard</h2>
-          <p className="text-slate-400 text-sm mt-1">Real-time infrastructure health monitoring and response overview.</p>
+          <h2 className="text-2xl font-bold tracking-tight">Incident Directory</h2>
+          <p className="text-slate-400 text-sm mt-1">Comprehensive list of all tracked incidents and their statuses.</p>
         </div>
-      </div>
-
-      <div className="grid grid-cols-4 gap-6">
-        {[
-          { label: 'Active Critical (P0)', value: incidents.filter(i => i.severity === 'P0' && i.state !== 'CLOSED').length, color: 'text-red-500' },
-          { label: 'MTTR (Avg)', value: metrics?.avg_mttr_seconds_last_hour ? `${Math.round(metrics.avg_mttr_seconds_last_hour / 60)}m` : 'N/A', color: 'text-slate-200' },
-          { label: 'SLA Status', value: '99.98%', color: 'text-green-500' },
-          { label: 'Total Logs Ingested', value: metrics ? (metrics.signals_aggregated_last_hour > 1000 ? `${(metrics.signals_aggregated_last_hour / 1000).toFixed(1)}k` : metrics.signals_aggregated_last_hour) : '...', color: 'text-slate-400' },
-        ].map((stat, i) => (
-          <Card key={i}>
-            <CardContent className="p-4 flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">{stat.label}</span>
-              <span className={cn("text-2xl font-bold tracking-tight font-mono", stat.color)}>{stat.value}</span>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="flex items-center justify-between mt-8">
-        <h3 className="text-lg font-bold tracking-tight">Recent Active Incidents</h3>
-        <button 
-          onClick={() => navigate('/incidents')}
-          className="text-xs text-brand-blue hover:text-brand-blue/80 font-medium"
-        >
-          View All Directory &rarr;
-        </button>
+        <div className="flex gap-4">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+            <Input 
+              placeholder="Search ID, Component, State..." 
+              className="pl-9 w-64 bg-slate-900/50"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <button className="inline-flex items-center gap-2 px-3 py-1.5 border border-slate-700 rounded-md bg-slate-900 hover:bg-slate-800 text-xs text-slate-300">
+            <Filter className="w-3 h-3" />
+            Filter
+          </button>
+        </div>
       </div>
 
       <Card>
@@ -111,11 +93,11 @@ export function Dashboard() {
               ) : filteredIncidents.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-32 text-center text-slate-500 font-mono">
-                    NO ACTIVE INCIDENTS REPORTED
+                    NO INCIDENTS MATCHING CRITERIA
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredIncidents.slice(0, 5).map((incident) => (
+                filteredIncidents.map((incident) => (
                   <TableRow 
                     key={incident.id} 
                     className="cursor-pointer group"

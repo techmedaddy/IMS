@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Terminal, FileText, CheckCircle2, History, AlertCircle, Clock } from 'lucide-react';
+import axios from 'axios';
+import toast from 'react-hot-toast';
 import { incidentsApi } from '@/src/api/incidents';
 import { IncidentDetail, IncidentState, RCA } from '@/src/types';
 import { Button } from '@/src/components/ui/Button';
@@ -52,11 +54,13 @@ export function IncidentDetailPage() {
       await incidentsApi.transition(id, { to_state });
       const updated = await incidentsApi.get(id);
       setData(updated);
-    } catch (error: any) {
-      if (error.response?.status === 400) {
-        alert("Cannot close incident: " + (error.response?.data?.detail || "RCA incomplete."));
+      toast.success(`Transitioned to ${to_state}`);
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error) && error.response?.status === 400) {
+        toast.error("Cannot close incident: " + (error.response?.data?.detail || "RCA incomplete."));
         setActiveTab('rca');
       } else {
+        toast.error('Transition failed');
         console.error('Transition failed', error);
       }
     }
@@ -70,10 +74,10 @@ export function IncidentDetailPage() {
       await incidentsApi.submitRca(id, rcaForm);
       const updated = await incidentsApi.get(id);
       setData(updated);
-      alert("RCA submitted successfully.");
+      toast.success("RCA submitted successfully.");
     } catch (error) {
       console.error('RCA submission failed', error);
-      alert("Failed to submit RCA.");
+      toast.error("Failed to submit RCA.");
     } finally {
       setSubmittingRca(false);
     }
@@ -195,7 +199,7 @@ export function IncidentDetailPage() {
                         <Label>Detection Start Time (UTC)</Label>
                         <Input 
                           type="datetime-local" 
-                          value={rcaForm.start_time.slice(0, 16)} 
+                          value={rcaForm.start_time ? format(new Date(rcaForm.start_time), "yyyy-MM-dd'T'HH:mm") : ''} 
                           onChange={e => setRcaForm({...rcaForm, start_time: new Date(e.target.value).toISOString()})}
                           required
                         />
@@ -204,7 +208,7 @@ export function IncidentDetailPage() {
                         <Label>Resolution End Time (UTC)</Label>
                         <Input 
                           type="datetime-local" 
-                          value={rcaForm.end_time.slice(0, 16)} 
+                          value={rcaForm.end_time ? format(new Date(rcaForm.end_time), "yyyy-MM-dd'T'HH:mm") : ''} 
                           onChange={e => setRcaForm({...rcaForm, end_time: new Date(e.target.value).toISOString()})}
                           required
                         />
