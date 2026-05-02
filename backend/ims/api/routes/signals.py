@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 
 from aiokafka import AIOKafkaProducer
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.asyncio import Redis
 
 from ims.api.deps import get_producer, get_redis, get_settings
@@ -31,11 +31,14 @@ async def ingest_signal(
     payload["ts"] = payload["ts"] or now.isoformat()
     payload["received_at"] = now.isoformat()
 
-    await producer.send_and_wait(
-        settings.kafka_topic_signals,
-        json.dumps(payload).encode("utf-8"),
-        key=signal.component_id.encode("utf-8"),
-    )
+    try:
+        await producer.send_and_wait(
+            settings.kafka_topic_signals,
+            json.dumps(payload).encode("utf-8"),
+            key=signal.component_id.encode("utf-8"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail="Broker unavailable; try again") from exc
 
     await request.app.state.ingest_counter.inc(1)
     return SignalQueuedOut(status="queued", queued_at=now)

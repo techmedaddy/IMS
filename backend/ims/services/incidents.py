@@ -19,7 +19,7 @@ from ims.config import Settings
 from ims.db.models import RCA, WorkItem, WorkItemState
 from ims.domain.alerts import severity_rank
 from ims.domain.rca import can_close_incident, is_rca_complete
-from ims.domain.state_machine import is_valid_transition
+from ims.domain.state_machine import TransitionContext, TransitionError, transition_or_raise
 
 
 def normalize_signal(doc: dict[str, Any]) -> dict[str, Any]:
@@ -89,9 +89,7 @@ async def transition_incident(
     if incident is None:
         raise HTTPException(status_code=404, detail="Incident not found")
 
-    if not is_valid_transition(incident.state, to_state):
-        raise HTTPException(status_code=400, detail=f"Invalid transition {incident.state.value} -> {to_state.value}")
-
+    ctx = TransitionContext()
     if to_state == WorkItemState.CLOSED:
         rca = incident.rca
         rca_complete = (
@@ -105,8 +103,14 @@ async def transition_incident(
                 prevention_steps=rca.prevention_steps,
             )
         )
-        if not can_close_incident(rca_present=rca is not None, rca_complete=rca_complete):
-            raise HTTPException(status_code=400, detail="RCA is missing or incomplete; cannot close incident")
+        ctx = TransitionContext(rca_present=rca is not None, rca_complete=rca_complete)
+
+    try:
+        transition_or_raise(from_state=incident.state, to_state=to_state, ctx=ctx)
+    except TransitionError as exc:
+        if to_state == WorkItemState.CLOSED and not can_close_incident(rca_present=ctx.rca_present, rca_complete=ctx.rca_complete):
+            raise HTTPException(status_code=400, detail="RCA is missing or incomplete; cannot close incident") from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     incident.state = to_state
     incident.updated_at = datetime.now(timezone.utc)

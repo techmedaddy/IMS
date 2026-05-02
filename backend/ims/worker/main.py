@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from aiokafka import AIOKafkaConsumer
+from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from redis.asyncio import Redis
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -18,7 +18,7 @@ from ims.db.models import SignalAggregate, WorkItem, WorkItemState
 from ims.db.mongo import create_mongo_client, signals_collection
 from ims.db.postgres import create_engine, create_sessionmaker, init_db, session_scope
 from ims.db.redis import create_redis
-from ims.domain.alerts import severity_for_component_type
+from ims.domain.alerts import alert_strategy_for_component_type, severity_for_component_type
 
 
 async def _retry(operation, *, attempts: int = 5, base_delay: float = 0.2):
@@ -50,7 +50,9 @@ class AggregationBuffer:
     by_bucket: dict[tuple[datetime, str], int]
 
 
-async def _flush_loop(settings: Settings, sessionmaker: async_sessionmaker[AsyncSession], buffer: AggregationBuffer):
+async def _flush_loop(
+    settings: Settings, sessionmaker: async_sessionmaker[AsyncSession], redis: Redis, buffer: AggregationBuffer
+):
     while True:
         await asyncio.sleep(5)
         async with buffer.lock:
@@ -60,7 +62,11 @@ async def _flush_loop(settings: Settings, sessionmaker: async_sessionmaker[Async
             buffer.by_bucket = defaultdict(int)
 
         rate = processed / 5
-        print(f"[worker] processed throughput: {rate:.1f} signals/sec")
+        try:
+            open_incidents = int(await redis.scard(settings.dashboard_active_set))
+        except Exception:  # noqa: BLE001
+            open_incidents = -1
+        print(f"[worker] processed_throughput={rate:.1f} signals/sec open_incidents={open_incidents}")
 
         if not batch:
             continue
@@ -124,7 +130,8 @@ async def _create_work_item(
     await redis.set(active_incident_key(settings, component_id), str(incident.id), ex=24 * 3600)
     await cache_incident(redis, settings, incident_snapshot(incident))
 
-    print(f"[worker] ALERT {incident.severity} component={component_id} type={component_type} incident_id={incident.id}")
+    alert = alert_strategy_for_component_type(component_type)
+    alert.dispatch(component_id=component_id, component_type=component_type, incident_id=str(incident.id))
     return incident
 
 
@@ -139,6 +146,9 @@ async def run_worker() -> None:
     mongo_client = create_mongo_client(settings)
     signals = signals_collection(mongo_client, settings)
 
+    dlq_producer = AIOKafkaProducer(bootstrap_servers=settings.kafka_bootstrap)
+    await dlq_producer.start()
+
     consumer = AIOKafkaConsumer(
         settings.kafka_topic_signals,
         bootstrap_servers=settings.kafka_bootstrap,
@@ -148,14 +158,37 @@ async def run_worker() -> None:
     await consumer.start()
 
     buffer = AggregationBuffer(lock=asyncio.Lock(), processed=0, by_bucket=defaultdict(int))
-    flush_task = asyncio.create_task(_flush_loop(settings, sessionmaker, buffer))
+    flush_task = asyncio.create_task(_flush_loop(settings, sessionmaker, redis, buffer))
 
     try:
         async for msg in consumer:
-            data = json.loads(msg.value.decode("utf-8"))
+            raw_value = msg.value
+            try:
+                data = json.loads(raw_value.decode("utf-8"))
+            except Exception as exc:  # noqa: BLE001
+                await dlq_producer.send_and_wait(
+                    settings.kafka_topic_dlq,
+                    json.dumps(
+                        {
+                            "error": "json_decode_failed",
+                            "reason": str(exc),
+                            "raw": raw_value.decode("utf-8", errors="replace"),
+                        }
+                    ).encode("utf-8"),
+                )
+                continue
             component_id = str(data.get("component_id", "")).strip()
             component_type = str(data.get("component_type", "")).strip()
             if not component_id or not component_type:
+                await dlq_producer.send_and_wait(
+                    settings.kafka_topic_dlq,
+                    json.dumps(
+                        {
+                            "error": "missing_fields",
+                            "raw": data,
+                        }
+                    ).encode("utf-8"),
+                )
                 continue
 
             ts = _parse_dt(data.get("ts"))
@@ -170,7 +203,14 @@ async def run_worker() -> None:
                 "received_at": _parse_dt(data.get("received_at")),
                 "work_item_id": active_id,
             }
-            await signals.insert_one(doc)
+            try:
+                await signals.insert_one(doc)
+            except Exception as exc:  # noqa: BLE001
+                await dlq_producer.send_and_wait(
+                    settings.kafka_topic_dlq,
+                    json.dumps({"error": "mongo_insert_failed", "reason": str(exc), "raw": data}).encode("utf-8"),
+                )
+                continue
 
             async with buffer.lock:
                 buffer.processed += 1
@@ -189,17 +229,30 @@ async def run_worker() -> None:
             if count >= settings.debounce_threshold:
                 created = await redis.set(created_key, "1", ex=settings.debounce_window_seconds, nx=True)
                 if created:
-                    await _create_work_item(
-                        settings=settings,
-                        sessionmaker=sessionmaker,
-                        redis=redis,
-                        signals=signals,
-                        component_id=component_id,
-                        component_type=component_type,
-                    )
+                    try:
+                        await _create_work_item(
+                            settings=settings,
+                            sessionmaker=sessionmaker,
+                            redis=redis,
+                            signals=signals,
+                            component_id=component_id,
+                            component_type=component_type,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        await dlq_producer.send_and_wait(
+                            settings.kafka_topic_dlq,
+                            json.dumps(
+                                {
+                                    "error": "create_work_item_failed",
+                                    "reason": str(exc),
+                                    "raw": data,
+                                }
+                            ).encode("utf-8"),
+                        )
     finally:
         flush_task.cancel()
         await consumer.stop()
+        await dlq_producer.stop()
         await redis.close()
         mongo_client.close()
         await engine.dispose()

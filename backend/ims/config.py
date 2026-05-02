@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     kafka_bootstrap: str = "kafka:9092"
     kafka_topic_signals: str = "ims.signals"
+    kafka_topic_dlq: str = "ims.signals.dlq"
     kafka_consumer_group: str = "ims-worker"
 
     redis_url: str = "redis://redis:6379/0"

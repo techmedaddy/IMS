@@ -86,6 +86,7 @@ services:
         set -eu
         BROKERS="redpanda:9092"
         rpk -X "brokers=$$BROKERS" topic create ims.signals -p 3 -r 1 >/dev/null 2>&1 || true
+        rpk -X "brokers=$$BROKERS" topic create ims.signals.dlq -p 1 -r 1 >/dev/null 2>&1 || true
         PARTS="$$(rpk -X "brokers=$$BROKERS" topic describe ims.signals 2>/dev/null | awk '/^PARTITIONS/{print $$2}')"
         if [ -z "$$PARTS" ]; then
           echo "failed to read topic partitions"
@@ -96,6 +97,7 @@ services:
           rpk -X "brokers=$$BROKERS" topic add-partitions ims.signals --num "$$ADD"
         fi
         rpk -X "brokers=$$BROKERS" topic describe ims.signals | awk '/^NAME|^PARTITIONS|^REPLICAS/{print}'
+        rpk -X "brokers=$$BROKERS" topic describe ims.signals.dlq | awk '/^NAME|^PARTITIONS|^REPLICAS/{print}'
     restart: "no"
 
   api:
