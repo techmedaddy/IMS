@@ -54,8 +54,8 @@ def burst_signals(*, url: str, component_id: str, component_type: str, n: int, c
 def main() -> int:
     parser = argparse.ArgumentParser(description="Simulate IMS outage signals (backend-only demo).")
     parser.add_argument("--base-url", default="http://localhost:8000", help="IMS API base URL")
-    parser.add_argument("--burst-component-id", default="CACHE_CLUSTER_01")
-    parser.add_argument("--burst-component-type", default="CACHE")
+    parser.add_argument("--burst-component-id", default="RDBMS_PRIMARY_01")
+    parser.add_argument("--burst-component-type", default="RDBMS")
     parser.add_argument("--burst-count", type=int, default=120, help="Signals to send for debounce trigger (>=100)")
     parser.add_argument("--concurrency", type=int, default=30, help="Parallel requests during bursts")
     args = parser.parse_args()
@@ -80,11 +80,21 @@ def main() -> int:
         concurrency=args.concurrency,
     )
 
-    # Smaller secondary bursts to show severity differences. These are set >=100 so they also trigger.
+    # Follow-up burst: MCP host failure.
+    time.sleep(2)
     burst_signals(
         url=signals_url,
-        component_id="RDBMS_PRIMARY_01",
-        component_type="RDBMS",
+        component_id="MCP_HOST_01",
+        component_type="MCP_HOST",
+        n=101,
+        concurrency=min(args.concurrency, 20),
+    )
+
+    # Additional bursts to show severity differences. These are set >=100 so they also trigger.
+    burst_signals(
+        url=signals_url,
+        component_id="CACHE_CLUSTER_01",
+        component_type="CACHE",
         n=105,
         concurrency=min(args.concurrency, 20),
     )

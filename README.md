@@ -1,7 +1,32 @@
-# Incident Management System (IMS) — Backend Demo
+# Incident Management System (IMS) — Backend Engine + Infra
 
-This repository contains a backend-first implementation of the IMS assignment:
-async ingestion → broker → worker → polyglot persistence, with a transactional incident workflow and mandatory RCA before closure.
+This repository implements the **backend engine + infrastructure** for the IMS assignment:
+async ingestion → broker → worker → polyglot persistence, with a transactional incident workflow, mandatory RCA before closure, and MTTR calculation.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Client --> API[FastAPI /api/signals]
+  API -->|produce| Kafka[(Redpanda topic ims.signals)]
+  Kafka --> Worker[Worker consumer]
+  Worker --> Mongo[(MongoDB raw signals)]
+  Worker --> Postgres[(Postgres WorkItems + RCA + Aggregates)]
+  Worker --> Redis[(Redis dashboard cache)]
+  Worker --> DLQ[(Redpanda topic ims.signals.dlq)]
+```
+
+## Backpressure handling (why the system doesn’t crash)
+
+- **Thin ingestion API**: `/api/signals` validates + rate-limits and only enqueues to Kafka; it does not write to Postgres/Mongo in the request path.
+- **Broker buffering**: when persistence is slow/unavailable, Kafka/Redpanda absorbs the burst; ingestion remains stable.
+- **Worker retries + DLQ**: worker retries DB writes; malformed events and repeated failures are sent to `ims.signals.dlq` for audit and replay/debug.
+
+### Demo: pause Postgres while ingesting
+
+```bash
+./scripts/demo_backpressure.sh
+```
 
 ## Quickstart (Backend)
 
@@ -16,6 +41,12 @@ docker compose up --build -d
 
 ```bash
 curl -sS http://localhost:8000/api/health
+```
+
+### 1b) Metrics snapshot
+
+```bash
+curl -sS http://localhost:8000/api/metrics | jq
 ```
 
 ### 2) Generate incidents (simulator)
