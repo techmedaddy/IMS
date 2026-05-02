@@ -10,24 +10,24 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', ...props }, ref) => {
     const variants = {
-      primary: "bg-brand-blue text-white hover:bg-brand-blue/90 font-medium shadow-sm",
-      secondary: "bg-slate-800 text-slate-200 hover:bg-slate-700",
-      outline: "border border-slate-700 bg-transparent hover:bg-slate-800 text-slate-200",
-      ghost: "hover:bg-slate-800 text-slate-400 hover:text-slate-200",
-      danger: "bg-red-600 text-white hover:bg-red-700 shadow-sm",
+      primary: "bg-[var(--color-brand)] text-white hover:bg-[var(--color-brand-hover)] font-medium shadow-sm shadow-[var(--color-brand)]/20",
+      secondary: "bg-[var(--color-surface-overlay)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-default)]",
+      outline: "border border-[var(--color-border-default)] bg-transparent hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]",
+      ghost: "hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]",
+      danger: "bg-red-600/90 text-white hover:bg-red-600 shadow-sm",
     };
 
     const sizes = {
-      sm: "h-8 px-3 text-xs rounded-sm",
-      md: "h-9 px-4 py-2 rounded-md",
-      lg: "h-11 px-8 rounded-md",
-      icon: "h-9 w-9 rounded-md",
+      sm: "h-7 px-3 text-[12px] rounded-md gap-1.5",
+      md: "h-8 px-3.5 text-[13px] rounded-md gap-2",
+      lg: "h-10 px-5 text-sm rounded-lg gap-2",
+      icon: "h-8 w-8 rounded-md",
     };
 
     return (
       <button
         className={cn(
-          "inline-flex items-center justify-center whitespace-nowrap text-sm ring-offset-slate-950 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:pointer-events-none disabled:opacity-50",
+          "inline-flex items-center justify-center whitespace-nowrap transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:pointer-events-none disabled:opacity-40 cursor-pointer",
           variants[variant],
           sizes[size],
           className

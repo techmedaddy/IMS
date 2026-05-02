@@ -20,116 +20,75 @@ export function Incidents() {
     const fetchIncidents = async () => {
       try {
         const data = await incidentsApi.list();
-        const sortedData = [...data].sort((a, b) => {
+        const sorted = [...data].sort((a, b) => {
           if (a.severity === 'P0' && b.severity !== 'P0') return -1;
           if (a.severity !== 'P0' && b.severity === 'P0') return 1;
           return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
         });
-        setIncidents(sortedData);
-      } catch (error) {
-        console.error('Failed to fetch incidents', error);
-      } finally {
-        setLoading(false);
-      }
+        setIncidents(sorted);
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
     };
-
     fetchIncidents();
-    const interval = setInterval(fetchIncidents, 30000);
-    return () => clearInterval(interval);
+    const id = setInterval(fetchIncidents, 30000);
+    return () => clearInterval(id);
   }, []);
 
-  const filteredIncidents = incidents.filter(idx => 
-    idx.component_id.toLowerCase().includes(search.toLowerCase()) ||
-    idx.id.toLowerCase().includes(search.toLowerCase()) ||
-    idx.state.toLowerCase().includes(search.toLowerCase())
+  const filtered = incidents.filter(i =>
+    i.component_id.toLowerCase().includes(search.toLowerCase()) ||
+    i.id.toLowerCase().includes(search.toLowerCase()) ||
+    i.state.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-6xl">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Incident Directory</h2>
-          <p className="text-slate-400 text-sm mt-1">Comprehensive list of all tracked incidents and their statuses.</p>
+          <h2 className="text-xl font-semibold tracking-tight text-[var(--color-text-primary)]">Incidents</h2>
+          <p className="text-[13px] text-[var(--color-text-tertiary)] mt-1">Browse and manage all tracked incidents.</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-2">
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-            <Input 
-              placeholder="Search ID, Component, State..." 
-              className="pl-9 w-64 bg-slate-900/50"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <Search className="absolute left-2.5 top-[7px] h-3.5 w-3.5 text-[var(--color-text-ghost)]" />
+            <Input placeholder="Search…" className="pl-8 w-56 h-8 text-[12px]" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <button className="inline-flex items-center gap-2 px-3 py-1.5 border border-slate-700 rounded-md bg-slate-900 hover:bg-slate-800 text-xs text-slate-300">
-            <Filter className="w-3 h-3" />
-            Filter
+          <button className="inline-flex items-center gap-1.5 px-2.5 h-8 border border-[var(--color-border-default)] rounded-md bg-[var(--color-surface-raised)] hover:bg-[var(--color-surface-hover)] text-[12px] text-[var(--color-text-secondary)] transition-colors">
+            <Filter className="w-3 h-3" /> Filter
           </button>
         </div>
       </div>
-
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-16">Severity</TableHead>
-                <TableHead>Incident ID</TableHead>
+                <TableHead className="w-20">Severity</TableHead>
+                <TableHead>ID</TableHead>
                 <TableHead>Component</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>State</TableHead>
                 <TableHead>Duration</TableHead>
-                <TableHead>Last Update</TableHead>
-                <TableHead className="w-10"></TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead className="w-8"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell colSpan={8} className="h-12 text-center animate-pulse bg-slate-900/20" />
-                  </TableRow>
-                ))
-              ) : filteredIncidents.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center text-slate-500 font-mono">
-                    NO INCIDENTS MATCHING CRITERIA
-                  </TableCell>
+              {loading ? Array.from({length:4}).map((_,i) => (
+                <TableRow key={i}><TableCell colSpan={8}><div className="h-4 bg-[var(--color-surface-hover)] rounded animate-pulse" /></TableCell></TableRow>
+              )) : filtered.length === 0 ? (
+                <TableRow><TableCell colSpan={8} className="h-24 text-center text-[var(--color-text-tertiary)]">No incidents found.</TableCell></TableRow>
+              ) : filtered.map(inc => (
+                <TableRow key={inc.id} className="cursor-pointer group" onClick={() => navigate(`/incidents/${inc.id}`)}>
+                  <TableCell><SeverityBadge severity={inc.severity} /></TableCell>
+                  <TableCell className="font-mono text-[12px] text-[var(--color-brand)]">{inc.id.slice(0,8)}</TableCell>
+                  <TableCell className="font-medium">{inc.component_id}</TableCell>
+                  <TableCell><span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-overlay)] text-[var(--color-text-tertiary)] font-mono border border-[var(--color-border-subtle)]">{inc.component_type}</span></TableCell>
+                  <TableCell><StatusBadge state={inc.state} /></TableCell>
+                  <TableCell className="font-mono tabular-nums text-[12px] text-[var(--color-text-secondary)]">{formatDuration(inc.start_time)}</TableCell>
+                  <TableCell className="text-[var(--color-text-tertiary)] text-[12px]">{format(new Date(inc.updated_at), 'MMM d, HH:mm')}</TableCell>
+                  <TableCell><ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-text-ghost)] group-hover:text-[var(--color-text-secondary)] transition-colors" /></TableCell>
                 </TableRow>
-              ) : (
-                filteredIncidents.map((incident) => (
-                  <TableRow 
-                    key={incident.id} 
-                    className="cursor-pointer group"
-                    onClick={() => navigate(`/incidents/${incident.id}`)}
-                  >
-                    <TableCell>
-                      <SeverityBadge severity={incident.severity} />
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-brand-blue uppercase tracking-tighter">
-                      {incident.id.split('-')[0]}...
-                    </TableCell>
-                    <TableCell className="font-semibold">{incident.component_id}</TableCell>
-                    <TableCell>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded border border-slate-800 bg-slate-900 text-slate-400 font-mono">
-                        {incident.component_type}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge state={incident.state} />
-                    </TableCell>
-                    <TableCell className="font-mono tabular-nums text-xs">
-                      {formatDuration(incident.start_time)}
-                    </TableCell>
-                    <TableCell className="text-slate-400 text-xs">
-                      {format(new Date(incident.updated_at), 'MMM d, HH:mm:ss')}
-                    </TableCell>
-                    <TableCell>
-                      <ArrowUpRight className="w-4 h-4 text-slate-600 group-hover:text-slate-200 transition-colors" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
         </CardContent>

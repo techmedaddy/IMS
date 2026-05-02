@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Activity, BarChart3, AlertCircle } from 'lucide-react';
+import { Shield, Activity, BarChart3, AlertCircle, ChevronRight } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/src/lib/utils';
 
@@ -12,64 +12,77 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: 'Analytics', icon: BarChart3, path: '/analytics' },
   ];
 
+  const breadcrumb = location.pathname === '/' 
+    ? 'Overview' 
+    : location.pathname.split('/').filter(Boolean).map(s => 
+        s.length > 8 ? s.slice(0, 8) + '…' : s
+      ).join(' / ');
+
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-200 overflow-hidden">
+    <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-slate-800 flex flex-col shrink-0">
-        <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-          <div className="w-8 h-8 bg-brand-blue rounded flex items-center justify-center">
-            <Shield className="text-white w-5 h-5" />
+      <aside className="w-[220px] border-r border-[var(--color-border-default)] flex flex-col shrink-0 bg-[var(--color-surface-base)]">
+        <div className="p-5 flex items-center gap-2.5">
+          <div className="w-7 h-7 bg-[var(--color-brand)] rounded-md flex items-center justify-center shadow-md shadow-[var(--color-brand)]/20">
+            <Shield className="text-white w-4 h-4" />
           </div>
-          <div>
-            <h1 className="font-bold tracking-tight text-lg leading-none">SENTINEL</h1>
-            <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Incident Management</p>
+          <div className="leading-none">
+            <h1 className="font-semibold tracking-tight text-[13px] text-[var(--color-text-primary)]">Sentinel</h1>
+            <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5 tracking-wide">IMS Platform</p>
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium",
-                location.pathname === item.path
-                  ? "bg-brand-blue/10 text-brand-blue"
-                  : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
-              )}
-            >
-              <item.icon className="w-4 h-4" />
-              {item.name}
-            </Link>
-          ))}
+        <nav className="flex-1 px-3 py-2 space-y-0.5">
+          {navItems.map((item) => {
+            const isActive = item.path === '/' 
+              ? location.pathname === '/' 
+              : location.pathname.startsWith(item.path);
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex items-center gap-2.5 px-2.5 py-[7px] rounded-md transition-all text-[13px] font-medium",
+                  isActive
+                    ? "bg-[var(--color-brand-muted)] text-[var(--color-brand-hover)]"
+                    : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                )}
+              >
+                <item.icon className="w-[15px] h-[15px]" />
+                {item.name}
+              </Link>
+            );
+          })}
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-6 h-6 rounded-full bg-slate-800" />
+        <div className="p-3 border-t border-[var(--color-border-subtle)]">
+          <div className="flex items-center gap-2.5 px-2.5 py-2 rounded-md hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer">
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[var(--color-brand)] to-purple-500 flex items-center justify-center text-[9px] font-bold text-white">
+              UE
+            </div>
             <div className="flex-1 overflow-hidden">
-              <p className="text-xs font-medium truncate">umarejazimam69</p>
-              <p className="text-[10px] text-slate-500 truncate">System Admin</p>
+              <p className="text-[11px] font-medium text-[var(--color-text-primary)] truncate">umarejazimam69</p>
+              <p className="text-[10px] text-[var(--color-text-tertiary)] truncate">Admin</p>
             </div>
           </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-14 border-b border-slate-800 flex items-center px-8 bg-slate-900/10 shrink-0">
-          <div className="flex-1 text-slate-400 text-xs font-mono">
-            PATH: sentinel{location.pathname.split('/').join(' > ')}
+      <main className="flex-1 flex flex-col overflow-hidden bg-[var(--color-surface-base)]">
+        <header className="h-11 border-b border-[var(--color-border-default)] flex items-center px-6 bg-[var(--color-surface-raised)]/50 shrink-0">
+          <div className="flex-1 flex items-center gap-1.5 text-[var(--color-text-tertiary)] text-[11px]">
+            <span className="text-[var(--color-text-ghost)]">sentinel</span>
+            <ChevronRight className="w-3 h-3 text-[var(--color-text-ghost)]" />
+            <span className="text-[var(--color-text-secondary)]">{breadcrumb}</span>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">System Live</span>
-            </div>
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent-green)] live-dot" />
+            <span className="text-[10px] text-[var(--color-text-tertiary)] tracking-wide">System Online</span>
           </div>
         </header>
         
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
           {children}
         </div>
       </main>

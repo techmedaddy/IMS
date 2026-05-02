@@ -10,7 +10,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       <input
         type={type}
         className={cn(
-          "flex h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-blue disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-8 w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-base)] px-3 py-1 text-[13px] text-[var(--color-text-primary)] shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-[var(--color-text-ghost)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-brand)] focus-visible:border-[var(--color-brand)] disabled:cursor-not-allowed disabled:opacity-40",
           className
         )}
         ref={ref}
@@ -28,7 +28,7 @@ const Textarea = React.forwardRef<
   return (
     <textarea
       className={cn(
-        "flex min-h-[80px] w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm shadow-sm placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-blue disabled:cursor-not-allowed disabled:opacity-50",
+        "flex min-h-[80px] w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-base)] px-3 py-2 text-[13px] text-[var(--color-text-primary)] shadow-sm placeholder:text-[var(--color-text-ghost)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-brand)] focus-visible:border-[var(--color-brand)] disabled:cursor-not-allowed disabled:opacity-40 resize-y",
         className
       )}
       ref={ref}
@@ -45,7 +45,7 @@ const Label = React.forwardRef<
   <label
     ref={ref}
     className={cn(
-      "text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1 block",
+      "text-[12px] font-medium text-[var(--color-text-secondary)] mb-1.5 block",
       className
     )}
     {...props}

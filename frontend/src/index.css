@@ -1,37 +1,133 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-brand-blue: #0066FF;
-  --color-severity-p0: #FF0000;
-  --color-severity-p1: #FF8800;
-  --color-severity-p2: #FFD500;
-  --color-severity-p3: #00BB00;
-  
-  --color-state-open: #FF4400;
-  --color-state-investigating: #0066FF;
-  --color-state-resolved: #00AA00;
-  --color-state-closed: #666666;
+  /* Refined neutral palette — warm grays, not flat slates */
+  --color-surface-base: #0c0d10;
+  --color-surface-raised: #13141a;
+  --color-surface-overlay: #1a1b23;
+  --color-surface-hover: #1f2029;
+  --color-border-default: #25262f;
+  --color-border-subtle: #1e1f27;
+  --color-text-primary: #e8e9ed;
+  --color-text-secondary: #9394a0;
+  --color-text-tertiary: #5f6070;
+  --color-text-ghost: #3d3e4a;
+
+  /* Brand — a refined indigo instead of generic blue */
+  --color-brand: #6366f1;
+  --color-brand-hover: #818cf8;
+  --color-brand-muted: rgba(99, 102, 241, 0.12);
+  --color-brand-subtle: rgba(99, 102, 241, 0.06);
+
+  /* Semantic colors — softer, less saturated for professional look */
+  --color-severity-p0: #f87171;
+  --color-severity-p1: #fb923c;
+  --color-severity-p2: #fbbf24;
+  --color-severity-p3: #4ade80;
+
+  --color-state-open: #f87171;
+  --color-state-investigating: #6366f1;
+  --color-state-resolved: #34d399;
+  --color-state-closed: #6b7280;
+
+  /* Accent colors for metric cards */
+  --color-accent-red: #ef4444;
+  --color-accent-green: #22c55e;
+  --color-accent-amber: #f59e0b;
+  --color-accent-blue: #3b82f6;
 }
 
 @layer base {
+  * {
+    border-color: var(--color-border-default);
+  }
+
   body {
-    @apply bg-slate-950 text-slate-200 antialiased font-sans text-sm;
+    background-color: var(--color-surface-base);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Remove default focus outlines, use custom */
+  :focus-visible {
+    outline: 1.5px solid var(--color-brand);
+    outline-offset: 1px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-brand-muted);
+    color: var(--color-text-primary);
   }
 }
 
-/* Custom Scrollbar for Monospace views */
+/* ─── Scrollbar ─── */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
-
 .custom-scrollbar::-webkit-scrollbar-track {
-  @apply bg-slate-900;
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 99px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-slate-700 rounded-full;
+/* ─── Utilities ─── */
+.gradient-border {
+  position: relative;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.3),
+    rgba(99, 102, 241, 0.05) 40%,
+    transparent 60%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ─── Subtle glow on cards ─── */
+.card-glow {
+  box-shadow:
+    0 0 0 1px var(--color-border-default),
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* ─── Pulse dot animation ─── */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.live-dot {
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+/* ─── Toast overrides ─── */
+[data-sonner-toaster],
+div[class*="toaster"] {
+  --toast-bg: var(--color-surface-overlay) !important;
+  --toast-border: var(--color-border-default) !important;
+  --toast-text: var(--color-text-primary) !important;
 }
