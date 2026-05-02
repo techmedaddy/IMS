@@ -19,14 +19,20 @@ The system must:
 *   enforce RCA before closure
     
 
-This is a **distributed, write-heavy, latency-sensitive system**.A monolithic request–response design will fail.
+This is a **distributed, write-heavy, latency-sensitive system**. A monolithic request–response design will fail.
 
 2\. Architectural Style
 -----------------------
 
 **Event-driven, queue-backed, multi-storage architecture**
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   Client → API (FastAPI) → Kafka → Workers → Storage Layer                                           ├─ PostgreSQL (source of truth)                                           ├─ MongoDB (raw signals)                                           ├─ Redis (cache)                                           └─ Aggregation layer   `
+```text
+Client → API (FastAPI) → Kafka → Workers → Storage Layer
+                                  ├─ PostgreSQL (source of truth)
+                                  ├─ MongoDB (raw signals)
+                                  ├─ Redis (cache)
+                                  └─ Aggregation layer
+```
 
 ### Rationale
 
@@ -238,7 +244,9 @@ Single DB = incorrect for this system.
 
 **States:**
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   OPEN → INVESTIGATING → RESOLVED → CLOSED   `
+```text
+OPEN → INVESTIGATING → RESOLVED → CLOSED
+```
 
 **Implementation:**
 
@@ -312,7 +320,16 @@ Example:
 5\. Data Flow
 -------------
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   1. Signal arrives → FastAPI2. API validates → pushes to Kafka3. Worker consumes4. Debounce logic applied5. Signals → MongoDB6. WorkItem → PostgreSQL7. Cache updated → Redis8. UI reads from Redis   `
+```text
+1. Signal arrives → FastAPI
+2. API validates → pushes to Kafka
+3. Worker consumes
+4. Debounce logic applied
+5. Signals → MongoDB
+6. WorkItem → PostgreSQL
+7. Cache updated → Redis
+8. UI reads from Redis
+```
 
 6\. Concurrency & Scaling
 -------------------------
@@ -372,7 +389,14 @@ Required features:
 9\. Why This Architecture Is Correct
 ------------------------------------
 
-RequirementDesign ResponseHigh throughputKafka + async workersNo system crash under loadqueue bufferingData integrityPostgreSQL transactionsFlexible loggingMongoDBFast UIRedisLifecycle enforcementState pattern
+| Requirement | Design response |
+|---|---|
+| High throughput | Kafka + async workers |
+| No system crash under load | Queue buffering / backpressure |
+| Data integrity | PostgreSQL transactions |
+| Flexible logging | MongoDB |
+| Fast UI | Redis |
+| Lifecycle enforcement | State pattern |
 
 10\. Trade-offs
 ---------------
