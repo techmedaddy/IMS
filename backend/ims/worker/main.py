@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ims.cache import active_incident_key, cache_incident, incident_snapshot
 from ims.config import Settings, get_settings
-from ims.db.models import SignalAggregate, WorkItem, WorkItemState
+from ims.db.models import IncidentEvent, SignalAggregate, WorkItem, WorkItemState
 import pymongo.errors
 from ims.db.mongo import create_mongo_client, init_mongo, signals_collection
 from ims.db.postgres import create_engine, create_sessionmaker, init_db, session_scope
@@ -122,6 +122,15 @@ async def _create_work_item(
                 return existing
                 
             session.add(incident)
+            await session.flush()
+
+            # Audit log: CREATED event
+            session.add(IncidentEvent(
+                work_item_id=incident.id,
+                event_type="CREATED",
+                new_state=WorkItemState.OPEN.value,
+                detail=f"Incident created for {component_id} ({component_type})",
+            ))
             await session.flush()
             return incident
 

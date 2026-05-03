@@ -37,10 +37,22 @@ class IncidentOut(BaseModel):
     updated_at: datetime
 
 
+class IncidentEventOut(BaseModel):
+    id: uuid.UUID
+    work_item_id: uuid.UUID
+    event_type: str
+    prev_state: str | None
+    new_state: str | None
+    actor: str
+    detail: str | None
+    timestamp: datetime
+
+
 class IncidentDetailOut(BaseModel):
     incident: IncidentOut
     signals: list[dict[str, Any]]
     rca: dict[str, Any] | None
+    timeline: list[IncidentEventOut] = []
 
 
 class TransitionIn(BaseModel):
@@ -53,3 +65,7 @@ class RCAIn(BaseModel):
     root_cause_category: str | None = None
     fix_applied: str | None = None
     prevention_steps: str | None = None
+
+
+class NoteIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)

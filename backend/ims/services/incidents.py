@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload
 from ims.api.schemas import IncidentOut, RCAIn
 from ims.cache import active_incident_key, cache_incident, incident_snapshot, remove_active_incident
 from ims.config import Settings
-from ims.db.models import RCA, WorkItem, WorkItemState
+from ims.db.models import RCA, IncidentEvent, WorkItem, WorkItemState
 from ims.domain.alerts import severity_rank
 from ims.domain.rca import can_close_incident, is_rca_complete
 from ims.domain.state_machine import TransitionContext, TransitionError, transition_or_raise
@@ -112,8 +112,19 @@ async def transition_incident(
             raise HTTPException(status_code=400, detail="RCA is missing or incomplete; cannot close incident") from exc
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    prev_state = incident.state
     incident.state = to_state
     incident.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    # Audit log
+    db.add(IncidentEvent(
+        work_item_id=incident.id,
+        event_type="STATE_CHANGE",
+        prev_state=prev_state.value,
+        new_state=to_state.value,
+        detail=f"Transitioned from {prev_state.value} to {to_state.value}",
+    ))
     await db.flush()
 
     snapshot = incident_snapshot(incident)
@@ -182,6 +193,14 @@ async def upsert_rca(
     incident.end_time = end_time
     incident.mttr_seconds = int((end_time - incident.start_time).total_seconds())
     incident.updated_at = now
+    await db.flush()
+
+    # Audit log
+    db.add(IncidentEvent(
+        work_item_id=incident.id,
+        event_type="RCA_SUBMITTED",
+        detail=f"RCA submitted: {body.root_cause_category}",
+    ))
     await db.flush()
 
     snapshot = incident_snapshot(incident)

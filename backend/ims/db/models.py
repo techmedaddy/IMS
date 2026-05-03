@@ -39,6 +39,7 @@ class WorkItem(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     rca: Mapped["RCA | None"] = relationship(back_populates="work_item", uselist=False)
+    events: Mapped[list["IncidentEvent"]] = relationship(back_populates="work_item", order_by="IncidentEvent.timestamp")
 
 
 class RCA(Base):
@@ -58,6 +59,23 @@ class RCA(Base):
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     work_item: Mapped[WorkItem] = relationship(back_populates="rca")
+
+
+class IncidentEvent(Base):
+    __tablename__ = "incident_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    work_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("work_items.id", ondelete="CASCADE"), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(50))  # STATE_CHANGE, RCA_SUBMITTED, CREATED, NOTE_ADDED, SLA_BREACH
+    prev_state: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    new_state: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    actor: Mapped[str] = mapped_column(String(100), default="system")
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    work_item: Mapped[WorkItem] = relationship(back_populates="events")
 
 
 class SignalAggregate(Base):
