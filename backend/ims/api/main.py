@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -22,6 +23,32 @@ async def _log_throughput(app: FastAPI) -> None:
         count = await app.state.ingest_counter.snapshot_and_reset()
         rate = count / 5
         print(f"[api] ingest throughput: {rate:.1f} signals/sec")
+
+
+async def _drain_fallback_buffer(app: FastAPI) -> None:
+    settings = app.state.settings
+    redis = app.state.redis
+    producer = app.state.kafka_producer
+    
+    while True:
+        await asyncio.sleep(1)
+        try:
+            # Drain up to 100 messages at a time
+            for _ in range(100):
+                raw = await redis.lpop("buffer:signals")
+                if not raw:
+                    break
+                
+                payload = json.loads(raw)
+                component_id = payload.get("component_id", "")
+                await producer.send_and_wait(
+                    settings.kafka_topic_signals,
+                    raw.encode("utf-8") if isinstance(raw, str) else raw,
+                    key=component_id.encode("utf-8"),
+                )
+        except Exception as exc:
+            print(f"[api] Error draining fallback buffer: {exc}")
+            await asyncio.sleep(5)
 
 
 @asynccontextmanager
@@ -49,11 +76,13 @@ async def lifespan(app: FastAPI):
 
     app.state.ingest_counter = ThroughputCounter()
     app.state.throughput_task = asyncio.create_task(_log_throughput(app))
+    app.state.drain_task = asyncio.create_task(_drain_fallback_buffer(app))
 
     try:
         yield
     finally:
         app.state.throughput_task.cancel()
+        app.state.drain_task.cancel()
         await app.state.kafka_producer.stop()
         await app.state.redis.close()
         app.state.mongo_client.close()

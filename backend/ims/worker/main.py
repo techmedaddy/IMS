@@ -49,19 +49,19 @@ def _parse_dt(value: Any) -> datetime:
 class AggregationBuffer:
     lock: asyncio.Lock
     processed: int
-    by_bucket: dict[tuple[datetime, str], int]
+    mongo_docs: list[dict[str, Any]]
 
 
 async def _flush_loop(
-    settings: Settings, sessionmaker: async_sessionmaker[AsyncSession], redis: Redis, buffer: AggregationBuffer
+    settings: Settings, sessionmaker: async_sessionmaker[AsyncSession], redis: Redis, buffer: AggregationBuffer, signals_collection
 ):
     while True:
         await asyncio.sleep(5)
         async with buffer.lock:
             processed = buffer.processed
             buffer.processed = 0
-            batch = buffer.by_bucket
-            buffer.by_bucket = defaultdict(int)
+            mongo_batch = buffer.mongo_docs
+            buffer.mongo_docs = []
 
         rate = processed / 5
         try:
@@ -70,24 +70,16 @@ async def _flush_loop(
             open_incidents = -1
         print(f"[worker] processed_throughput={rate:.1f} signals/sec open_incidents={open_incidents}")
 
-        if not batch:
-            continue
+        if mongo_batch:
+            try:
+                await signals_collection.insert_many(mongo_batch, ordered=False)
+            except pymongo.errors.BulkWriteError:
+                # Ignore duplicate key errors for idempotency
+                pass
+            except Exception as exc:
+                print(f"[worker] Mongo batch insert failed: {exc}")
 
-        async def _op():
-            async with session_scope(sessionmaker) as session:
-                for (bucket_start, component_type), count in batch.items():
-                    stmt = insert(SignalAggregate).values(
-                        bucket_start=bucket_start,
-                        component_type=component_type,
-                        count=count,
-                    )
-                    stmt = stmt.on_conflict_do_update(
-                        index_elements=[SignalAggregate.bucket_start, SignalAggregate.component_type],
-                        set_={"count": SignalAggregate.count + count},
-                    )
-                    await session.execute(stmt)
-
-        await _retry(_op)
+        # Removed SignalAggregate postgres insert
 
 
 async def _create_work_item(
@@ -171,8 +163,8 @@ async def run_worker() -> None:
     )
     await consumer.start()
 
-    buffer = AggregationBuffer(lock=asyncio.Lock(), processed=0, by_bucket=defaultdict(int))
-    flush_task = asyncio.create_task(_flush_loop(settings, sessionmaker, redis, buffer))
+    buffer = AggregationBuffer(lock=asyncio.Lock(), processed=0, mongo_docs=[])
+    flush_task = asyncio.create_task(_flush_loop(settings, sessionmaker, redis, buffer, signals))
 
     try:
         async for msg in consumer:
@@ -220,31 +212,24 @@ async def run_worker() -> None:
                 "received_at": _parse_dt(data.get("received_at")),
                 "work_item_id": active_id,
             }
-            try:
-                await signals.insert_one(doc)
-            except pymongo.errors.DuplicateKeyError:
-                # Idempotency check: drop duplicate signal
-                continue
-            except Exception as exc:  # noqa: BLE001
-                await dlq_producer.send_and_wait(
-                    settings.kafka_topic_dlq,
-                    json.dumps({"error": "mongo_insert_failed", "reason": str(exc), "raw": data}).encode("utf-8"),
-                )
-                continue
-
             async with buffer.lock:
+                buffer.mongo_docs.append(doc)
                 buffer.processed += 1
-                bucket = ts.replace(second=0, microsecond=0)
-                buffer.by_bucket[(bucket, component_type.upper())] += 1
+
+            bucket = ts.replace(second=0, microsecond=0).isoformat()
+            metric_key = f"metrics:signals:{bucket}"
 
             # Debounce counters
             count_key = f"debounce:count:{component_id}"
             created_key = f"debounce:created:{component_id}"
 
             pipe = redis.pipeline()
+            pipe.incr(metric_key)
+            pipe.expire(metric_key, 3600 * 2)  # Keep metrics for 2 hours
             pipe.incr(count_key)
             pipe.expire(count_key, settings.debounce_window_seconds)
-            count, _ttl = await pipe.execute()
+            results = await pipe.execute()
+            count = results[2]  # The result of the second incr
 
             if count >= settings.debounce_threshold:
                 created = await redis.set(created_key, "1", ex=settings.debounce_window_seconds, nx=True)

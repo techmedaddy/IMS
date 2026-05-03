@@ -6,15 +6,16 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ims.api.deps import get_db
-from ims.db.models import SignalAggregate, WorkItem, WorkItemState
+from ims.api.deps import get_db, get_redis
+from redis.asyncio import Redis
+from ims.db.models import WorkItem, WorkItemState
 
 
 router = APIRouter()
 
 
 @router.get("/metrics")
-async def metrics(db: AsyncSession = Depends(get_db)) -> dict:
+async def metrics(db: AsyncSession = Depends(get_db), redis: Redis = Depends(get_redis)) -> dict:
     now = datetime.now(timezone.utc)
     one_hour_ago = now - timedelta(hours=1)
 
@@ -35,13 +36,13 @@ async def metrics(db: AsyncSession = Depends(get_db)) -> dict:
         )
     ).scalar_one()
 
-    signals_last_hour = (
-        await db.execute(
-            select(func.coalesce(func.sum(SignalAggregate.count), 0))
-            .select_from(SignalAggregate)
-            .where(SignalAggregate.bucket_start >= one_hour_ago)
-        )
-    ).scalar_one()
+    keys = []
+    for i in range(60):
+        minute = (now - timedelta(minutes=i)).replace(second=0, microsecond=0)
+        keys.append(f"metrics:signals:{minute.isoformat()}")
+
+    redis_counts = await redis.mget(keys)
+    signals_last_hour = sum(int(c) for c in redis_counts if c is not None)
 
     return {
         "now": now.isoformat(),

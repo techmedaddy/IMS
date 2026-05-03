@@ -42,7 +42,9 @@ async def ingest_signal(
             key=signal.component_id.encode("utf-8"),
         )
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=503, detail="Broker unavailable; try again") from exc
+        # Fallback to Redis buffer if Kafka is unreachable
+        print(f"[api] Kafka send failed, falling back to Redis buffer: {exc}")
+        await redis.rpush("buffer:signals", json.dumps(payload))
 
     await request.app.state.ingest_counter.inc(1)
     return SignalQueuedOut(status="queued", queued_at=now, event_id=event_id)
