@@ -191,7 +191,7 @@ async def upsert_rca(
         incident.rca.submitted_at = now
 
     incident.end_time = end_time
-    incident.mttr_seconds = int((end_time - incident.start_time).total_seconds())
+    incident.mttr_seconds = int((now - incident.start_time).total_seconds())
     incident.updated_at = now
     await db.flush()
 

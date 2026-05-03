@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, String, Text, Index, text, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +24,14 @@ class WorkItemState(str, enum.Enum):
 
 class WorkItem(Base):
     __tablename__ = "work_items"
+    __table_args__ = (
+        Index(
+            "uix_component_active",
+            "component_id",
+            unique=True,
+            postgresql_where=text("state != 'CLOSED'")
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     component_id: Mapped[str] = mapped_column(String(200), index=True)
@@ -44,6 +52,15 @@ class WorkItem(Base):
 
 class RCA(Base):
     __tablename__ = "rcas"
+    __table_args__ = (
+        CheckConstraint(
+            "length(trim(root_cause_category)) > 0 AND "
+            "length(trim(fix_applied)) > 0 AND "
+            "length(trim(prevention_steps)) > 0 AND "
+            "end_time >= start_time",
+            name="chk_rca_completeness"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     work_item_id: Mapped[uuid.UUID] = mapped_column(

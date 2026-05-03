@@ -37,18 +37,36 @@ async def metrics(db: AsyncSession = Depends(get_db), redis: Redis = Depends(get
     ).scalar_one()
 
     keys = []
+    latency_sum_keys = []
+    latency_count_keys = []
     for i in range(60):
         minute = (now - timedelta(minutes=i)).replace(second=0, microsecond=0)
         keys.append(f"metrics:signals:{minute.isoformat()}")
+        latency_sum_keys.append(f"metrics:latency_sum:{minute.isoformat()}")
+        latency_count_keys.append(f"metrics:latency_count:{minute.isoformat()}")
 
-    redis_counts = await redis.mget(keys)
+    pipe = redis.pipeline()
+    pipe.mget(keys)
+    pipe.mget(latency_sum_keys)
+    pipe.mget(latency_count_keys)
+    results = await pipe.execute()
+    
+    redis_counts = results[0]
+    latency_sums = results[1]
+    latency_counts = results[2]
+
     signals_last_hour = sum(int(c) for c in redis_counts if c is not None)
+    
+    total_latency = sum(int(s) for s in latency_sums if s is not None)
+    total_latency_count = sum(int(c) for c in latency_counts if c is not None)
+    avg_latency_ms = (total_latency / total_latency_count) if total_latency_count > 0 else 0
 
     return {
         "now": now.isoformat(),
         "open_incidents": int(open_count or 0),
         "avg_mttr_seconds_last_hour": None if mttr_avg is None else float(mttr_avg),
         "signals_aggregated_last_hour": int(signals_last_hour or 0),
+        "avg_worker_latency_ms": round(avg_latency_ms, 2),
     }
 
 

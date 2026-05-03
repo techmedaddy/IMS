@@ -3,24 +3,40 @@
 This repository implements the **backend engine + infrastructure** for the IMS assignment:
 async ingestion → broker → worker → polyglot persistence, with a transactional incident workflow, mandatory RCA before closure, and MTTR calculation.
 
-## Architecture
+## Data Flow & Architecture
 
 ```mermaid
 flowchart LR
   Client --> API[FastAPI /api/signals]
   API -->|produce| Kafka[(Redpanda topic ims.signals)]
+  API -.->|fallback| Redis[(Redis Buffer)]
   Kafka --> Worker[Worker consumer]
+  Redis --> Drain[API Drain Task]
+  Drain --> Kafka
   Worker --> Mongo[(MongoDB raw signals)]
   Worker --> Postgres[(Postgres WorkItems + RCA + Aggregates)]
-  Worker --> Redis[(Redis dashboard cache)]
+  Worker --> RedisCache[(Redis dashboard cache)]
   Worker --> DLQ[(Redpanda topic ims.signals.dlq)]
 ```
 
-## Backpressure handling (why the system doesn’t crash)
+## Contracts & Failure Behavior (Production Grade)
 
-- **Thin ingestion API**: `/api/signals` validates + rate-limits and only enqueues to Kafka; it does not write to Postgres/Mongo in the request path.
-- **Broker buffering**: when persistence is slow/unavailable, Kafka/Redpanda absorbs the burst; ingestion remains stable.
-- **Worker retries + DLQ**: worker retries DB writes; malformed events and repeated failures are sent to `ims.signals.dlq` for audit and replay/debug.
+The system is designed to survive partial outages without data loss or duplication:
+
+1. **Ingestion Degradation**: If Kafka becomes unreachable, the `/api/signals` endpoint implements exponential backoff retries. If those fail, it falls back to a Redis memory buffer to ensure 202 Accepted requests are never dropped. An async drain task automatically pushes these to Kafka upon recovery.
+2. **Idempotency**: All signals require an `event_id`. Duplicate ingestion attempts are rejected at the MongoDB layer via a strict unique index.
+3. **Single Active Incident**: The PostgreSQL schema enforces a partial unique constraint (`UNIQUE (component_id) WHERE state != 'CLOSED'`). Concurrent workers cannot create duplicate incidents for the same component burst.
+4. **MTTR Contract**: Mean Time To Recovery is strictly computed as the RCA submission timestamp minus the timestamp of the *first* signal in the incident burst, removing manual tampering of end times.
+5. **RCA Completeness**: DB-level `CheckConstraint` enforces that all RCA fields are non-empty and logically ordered before closure.
+6. **Audit Completeness**: All mutations (state changes, notes, RCA submissions, SLA breaches) trigger an immutable `IncidentEvent` row in the same transaction.
+
+### Demo Scripts
+
+We provide scripts to simulate production disasters:
+- `./scripts/kill_kafka.sh`: Observe the API degrade gracefully to the Redis buffer without dropping requests.
+- `./scripts/kill_worker.sh`: Observe Kafka buffering the load.
+- `./scripts/burst_test.sh`: Flood the system to prove concurrency and debounce logic holds up.
+- `./scripts/replay_dlq.py`: Operational CLI to inspect and replay poisoned messages.
 
 ### Demo: pause Postgres while ingesting
 

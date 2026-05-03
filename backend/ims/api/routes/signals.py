@@ -35,16 +35,25 @@ async def ingest_signal(
     event_id = signal.event_id or str(uuid.uuid4())
     payload["event_id"] = event_id
 
-    try:
-        await producer.send_and_wait(
-            settings.kafka_topic_signals,
-            json.dumps(payload).encode("utf-8"),
-            key=signal.component_id.encode("utf-8"),
-        )
-    except Exception as exc:  # noqa: BLE001
-        # Fallback to Redis buffer if Kafka is unreachable
-        print(f"[api] Kafka send failed, falling back to Redis buffer: {exc}")
-        await redis.rpush("buffer:signals", json.dumps(payload))
+    import asyncio
+    max_retries = 3
+    base_delay = 0.1
+    
+    for attempt in range(max_retries):
+        try:
+            await producer.send_and_wait(
+                settings.kafka_topic_signals,
+                json.dumps(payload).encode("utf-8"),
+                key=signal.component_id.encode("utf-8"),
+            )
+            break
+        except Exception as exc:
+            if attempt == max_retries - 1:
+                # Fallback to Redis buffer if Kafka is unreachable after retries
+                print(f"[api] Kafka send failed after retries, falling back to Redis buffer: {exc}")
+                await redis.rpush("buffer:signals", json.dumps(payload))
+            else:
+                await asyncio.sleep(base_delay * (2 ** attempt))
 
     await request.app.state.ingest_counter.inc(1)
     return SignalQueuedOut(status="queued", queued_at=now, event_id=event_id)

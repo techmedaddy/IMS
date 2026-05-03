@@ -163,7 +163,20 @@ async def _create_work_item(
                 return existing
                 
             session.add(incident)
-            await session.flush()
+            from sqlalchemy.exc import IntegrityError
+            try:
+                await session.flush()
+            except IntegrityError:
+                await session.rollback()
+                # Uniqueness constraint violated, meaning another worker created it
+                existing = (await session.execute(
+                    select(WorkItem)
+                    .where(WorkItem.component_id == component_id)
+                    .where(WorkItem.state != WorkItemState.CLOSED)
+                )).scalar_one_or_none()
+                if existing:
+                    return existing
+                raise  # Re-raise if it's some other integrity error
 
             # Audit log: CREATED event
             session.add(IncidentEvent(
@@ -271,6 +284,12 @@ async def run_worker() -> None:
 
             bucket = ts.replace(second=0, microsecond=0).isoformat()
             metric_key = f"metrics:signals:{bucket}"
+            
+            # Latency tracking
+            received_at = doc["received_at"]
+            latency_ms = int((datetime.now(timezone.utc) - received_at).total_seconds() * 1000)
+            latency_sum_key = f"metrics:latency_sum:{bucket}"
+            latency_count_key = f"metrics:latency_count:{bucket}"
 
             # Debounce counters
             count_key = f"debounce:count:{component_id}"
@@ -279,10 +298,16 @@ async def run_worker() -> None:
             pipe = redis.pipeline()
             pipe.incr(metric_key)
             pipe.expire(metric_key, 3600 * 2)  # Keep metrics for 2 hours
+            
+            pipe.incrby(latency_sum_key, latency_ms)
+            pipe.expire(latency_sum_key, 3600 * 2)
+            pipe.incr(latency_count_key)
+            pipe.expire(latency_count_key, 3600 * 2)
+            
             pipe.incr(count_key)
             pipe.expire(count_key, settings.debounce_window_seconds)
             results = await pipe.execute()
-            count = results[2]  # The result of the second incr
+            count = results[-1]  # The result of the last incr
 
             if count >= settings.debounce_threshold:
                 created = await redis.set(created_key, "1", ex=settings.debounce_window_seconds, nx=True)
