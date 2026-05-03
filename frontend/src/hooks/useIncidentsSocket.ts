@@ -12,9 +12,8 @@ export function useIncidentsSocket(
     // but assuming standard setup, we can point to the backend directly if needed.
     // Let's use the standard relative path and assume Vite handles ws proxy, 
     // or we point to the API port. The backend runs on 8000.
-    const wsUrl = import.meta.env.VITE_API_URL 
-      ? import.meta.env.VITE_API_URL.replace('http', 'ws') + '/ws/incidents'
-      : `ws://localhost:8000/api/ws/incidents`;
+    const apiBase: string = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000/api';
+    const wsUrl = apiBase.replace(/^http/, 'ws') + '/ws/incidents';
 
     let ws: WebSocket;
     let reconnectTimer: NodeJS.Timeout;
