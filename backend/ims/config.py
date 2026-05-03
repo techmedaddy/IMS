@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     dashboard_incident_prefix: str = "incident:"
     active_incident_prefix: str = "active_incident:"
 
+    sla_breach_minutes: int = 30
+
 
 @lru_cache
 def get_settings() -> Settings:

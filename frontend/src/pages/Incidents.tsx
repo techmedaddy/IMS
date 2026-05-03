@@ -97,9 +97,16 @@ export function Incidents() {
                 <TableRow key={i}><TableCell colSpan={8}><div className="h-4 bg-[var(--color-surface-hover)] rounded animate-pulse" /></TableCell></TableRow>
               )) : filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={8} className="h-24 text-center text-[var(--color-text-tertiary)]">No incidents found.</TableCell></TableRow>
-              ) : filtered.map(inc => (
+              ) : filtered.map(inc => {
+                const isSlaBreached = inc.state !== 'CLOSED' && (new Date().getTime() - new Date(inc.start_time).getTime()) > 30 * 60 * 1000;
+                return (
                 <TableRow key={inc.id} className="cursor-pointer group" onClick={() => navigate(`/incidents/${inc.id}`)}>
-                  <TableCell><SeverityBadge severity={inc.severity} /></TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <SeverityBadge severity={inc.severity} />
+                      {isSlaBreached && <span className="text-[9px] bg-red-500/20 text-red-400 px-1 py-0.5 rounded border border-red-500/30 font-bold tracking-wider">SLA</span>}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-mono text-[12px] text-[var(--color-brand)]">{inc.id.slice(0,8)}</TableCell>
                   <TableCell className="font-medium">{inc.component_id}</TableCell>
                   <TableCell><span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-overlay)] text-[var(--color-text-tertiary)] font-mono border border-[var(--color-border-subtle)]">{inc.component_type}</span></TableCell>
@@ -108,7 +115,7 @@ export function Incidents() {
                   <TableCell className="text-[var(--color-text-tertiary)] text-[12px]">{format(new Date(inc.updated_at), 'MMM d, HH:mm')}</TableCell>
                   <TableCell><ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-text-ghost)] group-hover:text-[var(--color-text-secondary)] transition-colors" /></TableCell>
                 </TableRow>
-              ))}
+              )})}
             </TableBody>
           </Table>
         </CardContent>

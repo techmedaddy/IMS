@@ -174,13 +174,20 @@ export function Dashboard() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  incidents.slice(0, 5).map((incident) => (
+                  incidents.slice(0, 5).map((incident) => {
+                    const isSlaBreached = incident.state !== 'CLOSED' && (new Date().getTime() - new Date(incident.start_time).getTime()) > 30 * 60 * 1000;
+                    return (
                     <TableRow 
                       key={incident.id} 
                       className="cursor-pointer group"
                       onClick={() => navigate(`/incidents/${incident.id}`)}
                     >
-                      <TableCell><SeverityBadge severity={incident.severity} /></TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <SeverityBadge severity={incident.severity} />
+                          {isSlaBreached && <span className="text-[9px] bg-red-500/20 text-red-400 px-1 py-0.5 rounded border border-red-500/30 font-bold tracking-wider">SLA</span>}
+                        </div>
+                      </TableCell>
                       <TableCell className="font-mono text-[12px] text-[var(--color-brand)] tracking-tight">
                         {incident.id.slice(0, 8)}
                       </TableCell>
@@ -201,7 +208,7 @@ export function Dashboard() {
                         <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-text-ghost)] group-hover:text-[var(--color-text-secondary)] transition-colors" />
                       </TableCell>
                     </TableRow>
-                  ))
+                  )})
                 )}
               </TableBody>
             </Table>

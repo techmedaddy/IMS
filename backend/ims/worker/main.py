@@ -82,6 +82,47 @@ async def _flush_loop(
         # Removed SignalAggregate postgres insert
 
 
+async def _sla_check_loop(
+    settings: Settings, sessionmaker: async_sessionmaker[AsyncSession], redis: Redis
+):
+    """Periodically check for SLA breaches and auto-escalate."""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.sla_breach_minutes)
+            async with session_scope(sessionmaker) as session:
+                result = await session.execute(
+                    select(WorkItem)
+                    .where(WorkItem.state.in_([WorkItemState.OPEN, WorkItemState.INVESTIGATING]))
+                    .where(WorkItem.start_time < cutoff)
+                )
+                breached = result.scalars().all()
+
+                for incident in breached:
+                    escalated = False
+                    if incident.severity != "P0":
+                        incident.severity = "P0"
+                        escalated = True
+
+                    session.add(IncidentEvent(
+                        work_item_id=incident.id,
+                        event_type="SLA_BREACH",
+                        detail=f"SLA breached: open for >{settings.sla_breach_minutes}min"
+                              + (" — escalated to P0" if escalated else ""),
+                    ))
+                    incident.updated_at = datetime.now(timezone.utc)
+                    await session.flush()
+
+                    snapshot = incident_snapshot(incident)
+                    await cache_incident(redis, settings, snapshot)
+                    await redis.publish("channel:incidents:updates", json.dumps(snapshot))
+
+            if breached:
+                print(f"[worker] SLA check: {len(breached)} incident(s) breached")
+        except Exception as exc:
+            print(f"[worker] SLA check error: {exc}")
+
+
 async def _create_work_item(
     *,
     settings: Settings,
@@ -176,6 +217,7 @@ async def run_worker() -> None:
 
     buffer = AggregationBuffer(lock=asyncio.Lock(), processed=0, mongo_docs=[])
     flush_task = asyncio.create_task(_flush_loop(settings, sessionmaker, redis, buffer, signals))
+    sla_task = asyncio.create_task(_sla_check_loop(settings, sessionmaker, redis))
 
     try:
         async for msg in consumer:
