@@ -133,7 +133,9 @@ async def _create_work_item(
     )
 
     await redis.set(active_incident_key(settings, component_id), str(incident.id), ex=24 * 3600)
-    await cache_incident(redis, settings, incident_snapshot(incident))
+    snapshot = incident_snapshot(incident)
+    await cache_incident(redis, settings, snapshot)
+    await redis.publish("channel:incidents:updates", json.dumps(snapshot))
 
     alert = alert_strategy_for_component_type(component_type)
     alert.dispatch(component_id=component_id, component_type=component_type, incident_id=str(incident.id))

@@ -123,6 +123,8 @@ async def transition_incident(
     else:
         await cache_incident(redis, settings, snapshot)
         await redis.set(active_incident_key(settings, incident.component_id), str(incident.id), ex=24 * 3600)
+        
+    await redis.publish("channel:incidents:updates", json.dumps(snapshot))
 
     return snapshot
 
@@ -184,4 +186,5 @@ async def upsert_rca(
 
     snapshot = incident_snapshot(incident)
     await cache_incident(redis, settings, snapshot)
+    await redis.publish("channel:incidents:updates", json.dumps(snapshot))
     return snapshot

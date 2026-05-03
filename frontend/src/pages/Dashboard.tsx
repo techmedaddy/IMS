@@ -10,11 +10,33 @@ import { SeverityBadge, StatusBadge } from '@/src/components/ui/Badge';
 import { formatDuration, cn } from '@/src/lib/utils';
 import { format } from 'date-fns';
 
+import { useIncidentsSocket } from '@/src/hooks/useIncidentsSocket';
+import { useCallback } from 'react';
+
 export function Dashboard() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  const handleIncidentUpdate = useCallback((updatedIncident: Incident) => {
+    setIncidents(prev => {
+      const exists = prev.find(i => i.id === updatedIncident.id);
+      let newIncidents;
+      if (exists) {
+        newIncidents = prev.map(i => i.id === updatedIncident.id ? updatedIncident : i);
+      } else {
+        newIncidents = [updatedIncident, ...prev];
+      }
+      return newIncidents.sort((a, b) => {
+        if (a.severity === 'P0' && b.severity !== 'P0') return -1;
+        if (a.severity !== 'P0' && b.severity === 'P0') return 1;
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      });
+    });
+  }, []);
+
+  useIncidentsSocket(handleIncidentUpdate);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -37,8 +59,13 @@ export function Dashboard() {
       }
     };
     fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+    // Fetch metrics every 30s since WS only updates incidents
+    const metricsInterval = setInterval(async () => {
+      try {
+        setMetrics(await metricsApi.get());
+      } catch (e) {}
+    }, 30000);
+    return () => clearInterval(metricsInterval);
   }, []);
 
   const activeP0 = incidents.filter(i => i.severity === 'P0' && i.state !== 'CLOSED').length;

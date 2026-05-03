@@ -105,9 +105,11 @@ from ims.api.routes.metrics import router as metrics_router  # noqa: E402
 from ims.api.routes.fragments import router as fragments_router  # noqa: E402
 from ims.api.routes.incidents import router as incidents_router  # noqa: E402
 from ims.api.routes.signals import router as signals_router  # noqa: E402
+from ims.api.routes.ws import router as ws_router  # noqa: E402
 
 app.include_router(health_router, prefix="/api", tags=["health"])
 app.include_router(signals_router, prefix="/api", tags=["signals"])
 app.include_router(incidents_router, prefix="/api", tags=["incidents"])
 app.include_router(metrics_router, prefix="/api", tags=["metrics"])
+app.include_router(ws_router, tags=["websocket"])
 app.include_router(fragments_router, tags=["fragments"])

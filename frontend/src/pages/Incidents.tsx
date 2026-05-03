@@ -10,11 +10,33 @@ import { SeverityBadge, StatusBadge } from '@/src/components/ui/Badge';
 import { formatDuration } from '@/src/lib/utils';
 import { format } from 'date-fns';
 
+import { useIncidentsSocket } from '@/src/hooks/useIncidentsSocket';
+import { useCallback } from 'react';
+
 export function Incidents() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
+
+  const handleIncidentUpdate = useCallback((updatedIncident: Incident) => {
+    setIncidents(prev => {
+      const exists = prev.find(i => i.id === updatedIncident.id);
+      let newIncidents;
+      if (exists) {
+        newIncidents = prev.map(i => i.id === updatedIncident.id ? updatedIncident : i);
+      } else {
+        newIncidents = [updatedIncident, ...prev];
+      }
+      return newIncidents.sort((a, b) => {
+        if (a.severity === 'P0' && b.severity !== 'P0') return -1;
+        if (a.severity !== 'P0' && b.severity === 'P0') return 1;
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      });
+    });
+  }, []);
+
+  useIncidentsSocket(handleIncidentUpdate);
 
   useEffect(() => {
     const fetchIncidents = async () => {
@@ -30,8 +52,6 @@ export function Incidents() {
       finally { setLoading(false); }
     };
     fetchIncidents();
-    const id = setInterval(fetchIncidents, 30000);
-    return () => clearInterval(id);
   }, []);
 
   const filtered = incidents.filter(i =>

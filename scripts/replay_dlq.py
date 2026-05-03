@@ -1,63 +1,109 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 import argparse
+import asyncio
 import json
 import sys
+from pathlib import Path
 
-from kafka import KafkaConsumer, KafkaProducer
+# Add backend directory to sys.path to allow importing from ims
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+
+from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+from ims.config import get_settings
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Replay IMS DLQ messages back into the main signals topic.")
-    parser.add_argument("--bootstrap", default="localhost:9092", help="Kafka/Redpanda bootstrap servers")
-    parser.add_argument("--dlq-topic", default="ims.signals.dlq")
-    parser.add_argument("--signals-topic", default="ims.signals")
-    parser.add_argument("--max", type=int, default=50, help="Max messages to replay")
-    args = parser.parse_args()
+async def replay_dlq(max_messages: int, dry_run: bool) -> None:
+    settings = get_settings()
 
-    consumer = KafkaConsumer(
-        args.dlq_topic,
-        bootstrap_servers=args.bootstrap,
+    print(f"Connecting to Kafka at {settings.kafka_bootstrap}...")
+    consumer = AIOKafkaConsumer(
+        settings.kafka_topic_dlq,
+        bootstrap_servers=settings.kafka_bootstrap,
+        group_id="ims-dlq-replayer",
         auto_offset_reset="earliest",
         enable_auto_commit=False,
-        consumer_timeout_ms=3000,
-        value_deserializer=lambda b: b.decode("utf-8", errors="replace"),
     )
-    producer = KafkaProducer(
-        bootstrap_servers=args.bootstrap,
-        value_serializer=lambda s: s.encode("utf-8"),
-    )
+    await consumer.start()
 
-    replayed = 0
+    producer = None
+    if not dry_run:
+        producer = AIOKafkaProducer(bootstrap_servers=settings.kafka_bootstrap)
+        await producer.start()
+
+    print(f"Reading up to {max_messages} messages from {settings.kafka_topic_dlq}...")
+    count = 0
+
     try:
-        for msg in consumer:
-            if replayed >= args.max:
-                break
-            try:
-                payload = json.loads(msg.value)
-            except Exception:
-                continue
+        batch = await consumer.getmany(timeout_ms=5000, max_records=max_messages)
+        
+        if not batch:
+            print("DLQ is empty.")
+            return
 
-            raw = payload.get("raw")
-            if isinstance(raw, dict):
-                raw_str = json.dumps(raw)
-            elif isinstance(raw, str):
-                raw_str = raw
-            else:
-                continue
+        for tp, messages in batch.items():
+            for msg in messages:
+                if count >= max_messages:
+                    break
+                
+                try:
+                    payload = json.loads(msg.value.decode("utf-8", errors="replace"))
+                    original_raw = payload.get("raw")
+                    error = payload.get("error", "unknown")
+                    reason = payload.get("reason", "")
+                    
+                    print(f"\n--- DLQ Message {count+1} ---")
+                    print(f"Error: {error} | Reason: {reason}")
+                    
+                    if not original_raw:
+                        print("Skipping: No 'raw' payload found in DLQ message.")
+                        continue
+                        
+                    if isinstance(original_raw, dict):
+                        original_bytes = json.dumps(original_raw).encode("utf-8")
+                    else:
+                        original_bytes = original_raw.encode("utf-8") if isinstance(original_raw, str) else original_raw
 
-            producer.send(args.signals_topic, raw_str)
-            replayed += 1
+                    if not dry_run and producer:
+                        await producer.send_and_wait(
+                            settings.kafka_topic_signals,
+                            original_bytes,
+                            key=msg.key
+                        )
+                        print(f"Replayed to {settings.kafka_topic_signals}.")
+                    else:
+                        print("DRY RUN: Would have replayed this message.")
+                        
+                    count += 1
+                except Exception as e:
+                    print(f"Failed to process DLQ message: {e}")
+
+        if not dry_run and count > 0:
+            await consumer.commit()
+            print(f"\nSuccessfully replayed and committed {count} messages.")
+
     finally:
-        producer.flush()
-        consumer.close()
-        producer.close()
+        await consumer.stop()
+        if producer:
+            await producer.stop()
 
-    print(f"Replayed {replayed} messages from {args.dlq_topic} -> {args.signals_topic}")
-    return 0
+
+def main():
+    parser = argparse.ArgumentParser(description="Replay messages from the IMS Dead Letter Queue.")
+    parser.add_argument(
+        "--max",
+        type=int,
+        default=100,
+        help="Maximum number of messages to replay (default: 100)"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print messages without actually pushing them back to the main topic"
+    )
+    args = parser.parse_args()
+
+    asyncio.run(replay_dlq(max_messages=args.max, dry_run=args.dry_run))
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
-
+    main()
