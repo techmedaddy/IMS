@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Clock, ShieldAlert, BarChart3, PieChart as PieIcon, TrendingUp } from 'lucide-react';
-import { metricsApi } from '@/src/api/metrics';
+import { metricsApi, SignalTrendPoint } from '@/src/api/metrics';
 import { incidentsApi } from '@/src/api/incidents';
 import { Metrics, Incident } from '@/src/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/Card';
@@ -38,14 +38,20 @@ const tooltipStyle = {
 export function Analytics() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [trendData, setTrendData] = useState<SignalTrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [m, inc] = await Promise.all([metricsApi.get(), incidentsApi.list()]);
+        const [m, inc, trend] = await Promise.all([
+          metricsApi.get(),
+          incidentsApi.list(),
+          metricsApi.signalTrend(60),
+        ]);
         setMetrics(m);
         setIncidents(inc);
+        setTrendData(trend);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     };
@@ -55,6 +61,15 @@ export function Analytics() {
   }, []);
 
   if (loading) return <div className="p-8 text-[var(--color-text-tertiary)] text-[13px] animate-pulse">Loading analytics…</div>;
+
+  // Format trend data for the chart
+  const throughputTrend = trendData.map((point) => {
+    const date = new Date(point.minute);
+    return {
+      time: `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`,
+      signals: point.count,
+    };
+  });
 
   // Derive chart data
   const stateDistribution = [
@@ -70,17 +85,6 @@ export function Analytics() {
     { severity: 'P2', count: incidents.filter(i => i.severity === 'P2').length, fill: CHART_COLORS.yellow },
     { severity: 'P3', count: incidents.filter(i => i.severity === 'P3').length, fill: CHART_COLORS.green },
   ];
-
-  // Simulated throughput trend (in prod this would come from a time-series endpoint)
-  const currentSignals = metrics?.signals_aggregated_last_hour || 0;
-  const throughputTrend = Array.from({ length: 12 }, (_, i) => {
-    const minutesAgo = (11 - i) * 5;
-    const label = `${minutesAgo}m ago`;
-    // Distribute signals roughly across buckets with some variance
-    const base = Math.round(currentSignals / 12);
-    const noise = Math.round((Math.random() - 0.5) * base * 0.6);
-    return { time: minutesAgo === 0 ? 'Now' : label, signals: Math.max(0, base + noise) };
-  });
 
   const summaryCards = [
     { label: 'Throughput (1h)', value: metrics?.signals_aggregated_last_hour.toLocaleString() || '0', icon: Activity, color: 'text-emerald-400', bg: 'bg-emerald-500/8', iconColor: 'text-emerald-500/50' },

@@ -51,3 +51,30 @@ async def metrics(db: AsyncSession = Depends(get_db), redis: Redis = Depends(get
         "signals_aggregated_last_hour": int(signals_last_hour or 0),
     }
 
+
+@router.get("/metrics/signal-trend")
+async def signal_trend(
+    minutes: int = 60,
+    redis: Redis = Depends(get_redis),
+) -> list[dict]:
+    minutes = min(max(minutes, 1), 1440)  # Clamp between 1 and 24 hours
+    now = datetime.now(timezone.utc)
+
+    keys = []
+    timestamps = []
+    for i in range(minutes):
+        minute = (now - timedelta(minutes=i)).replace(second=0, microsecond=0)
+        keys.append(f"metrics:signals:{minute.isoformat()}")
+        timestamps.append(minute)
+
+    counts = await redis.mget(keys)
+
+    # Return oldest-first for charting
+    result = []
+    for ts, count in zip(reversed(timestamps), reversed(counts)):
+        result.append({
+            "minute": ts.isoformat(),
+            "count": int(count) if count is not None else 0,
+        })
+
+    return result
