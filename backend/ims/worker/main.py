@@ -307,7 +307,7 @@ async def run_worker() -> None:
             pipe.incr(count_key)
             pipe.expire(count_key, settings.debounce_window_seconds)
             results = await pipe.execute()
-            count = results[-1]  # The result of the last incr
+            count = results[-2]  # The result of the incr(count_key)
 
             if count >= settings.debounce_threshold:
                 created = await redis.set(created_key, "1", ex=settings.debounce_window_seconds, nx=True)
