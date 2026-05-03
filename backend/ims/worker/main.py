@@ -308,9 +308,12 @@ async def run_worker() -> None:
             pipe.expire(count_key, settings.debounce_window_seconds)
             results = await pipe.execute()
             count = results[-2]  # The result of the incr(count_key)
+            if count % 20 == 0 or count >= settings.debounce_threshold:
+                print(f"[debug] {component_id} count={count}")
 
             if count >= settings.debounce_threshold:
                 created = await redis.set(created_key, "1", ex=settings.debounce_window_seconds, nx=True)
+                print(f"[debug] {component_id} threshold met! created={created}")
                 if created:
                     try:
                         await _create_work_item(
