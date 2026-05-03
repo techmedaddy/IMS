@@ -3,4 +3,5 @@
 echo "Simulating worker node failure by killing the worker container..."
 docker compose kill worker
 echo "Worker killed. Watch the API keep accepting signals (buffered in Kafka or Redis)."
-echo "Restart it with: docker compose start worker"
+echo "Restart it with: docker compose start worker
+# Use alongside stress_test_ingestion.sh to observe buffering in action."
