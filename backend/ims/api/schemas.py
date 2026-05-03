@@ -10,6 +10,7 @@ from ims.db.models import WorkItemState
 
 
 class SignalIn(BaseModel):
+    event_id: str | None = Field(default=None, description="Idempotency key")
     component_id: str = Field(min_length=1, max_length=200)
     component_type: str = Field(min_length=1, max_length=50)
     message: str | None = Field(default=None, max_length=500)
@@ -20,6 +21,7 @@ class SignalIn(BaseModel):
 class SignalQueuedOut(BaseModel):
     status: str
     queued_at: datetime
+    event_id: str
 
 
 class IncidentOut(BaseModel):

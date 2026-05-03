@@ -27,9 +27,13 @@ async def ingest_signal(
     await enforce_rate_limit(request=request, redis=redis, settings=settings)
 
     now = datetime.now(timezone.utc)
-    payload = signal.model_dump(mode="json")
-    payload["ts"] = payload["ts"] or now.isoformat()
+    payload = signal.model_dump(mode="json", exclude_none=True)
+    payload["ts"] = payload.get("ts") or now.isoformat()
     payload["received_at"] = now.isoformat()
+    
+    import uuid
+    event_id = signal.event_id or str(uuid.uuid4())
+    payload["event_id"] = event_id
 
     try:
         await producer.send_and_wait(
@@ -41,4 +45,4 @@ async def ingest_signal(
         raise HTTPException(status_code=503, detail="Broker unavailable; try again") from exc
 
     await request.app.state.ingest_counter.inc(1)
-    return SignalQueuedOut(status="queued", queued_at=now)
+    return SignalQueuedOut(status="queued", queued_at=now, event_id=event_id)

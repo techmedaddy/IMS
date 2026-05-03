@@ -11,3 +11,7 @@ def create_mongo_client(settings: Settings) -> AsyncIOMotorClient:
 
 def signals_collection(client: AsyncIOMotorClient, settings: Settings) -> AsyncIOMotorCollection:
     return client[settings.mongo_db]["signals"]
+
+async def init_mongo(client: AsyncIOMotorClient, settings: Settings) -> None:
+    db = client[settings.mongo_db]
+    await db.signals.create_index("event_id", unique=True, sparse=True)

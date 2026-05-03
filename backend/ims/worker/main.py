@@ -9,13 +9,15 @@ from typing import Any
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ims.cache import active_incident_key, cache_incident, incident_snapshot
 from ims.config import Settings, get_settings
 from ims.db.models import SignalAggregate, WorkItem, WorkItemState
-from ims.db.mongo import create_mongo_client, signals_collection
+import pymongo.errors
+from ims.db.mongo import create_mongo_client, init_mongo, signals_collection
 from ims.db.postgres import create_engine, create_sessionmaker, init_db, session_scope
 from ims.db.redis import create_redis
 from ims.domain.alerts import alert_strategy_for_component_type, severity_for_component_type
@@ -117,10 +119,21 @@ async def _create_work_item(
 
     async def _op():
         async with session_scope(sessionmaker) as session:
+            # DB-level guard: check if an active incident already exists
+            existing = (await session.execute(
+                select(WorkItem)
+                .where(WorkItem.component_id == component_id)
+                .where(WorkItem.state != WorkItemState.CLOSED)
+            )).scalar_one_or_none()
+            
+            if existing:
+                return existing
+                
             session.add(incident)
             await session.flush()
+            return incident
 
-    await _retry(_op)
+    incident = await _retry(_op)
 
     await signals.update_many(
         {"component_id": component_id, "ts": {"$gte": window_start}},
@@ -144,6 +157,7 @@ async def run_worker() -> None:
 
     redis = create_redis(settings)
     mongo_client = create_mongo_client(settings)
+    await init_mongo(mongo_client, settings)
     signals = signals_collection(mongo_client, settings)
 
     dlq_producer = AIOKafkaProducer(bootstrap_servers=settings.kafka_bootstrap)
@@ -194,7 +208,10 @@ async def run_worker() -> None:
             ts = _parse_dt(data.get("ts"))
             active_id = await redis.get(active_incident_key(settings, component_id))
 
+            event_id = data.get("event_id")
+
             doc = {
+                "event_id": event_id,
                 "component_id": component_id,
                 "component_type": component_type,
                 "ts": ts,
@@ -205,6 +222,9 @@ async def run_worker() -> None:
             }
             try:
                 await signals.insert_one(doc)
+            except pymongo.errors.DuplicateKeyError:
+                # Idempotency check: drop duplicate signal
+                continue
             except Exception as exc:  # noqa: BLE001
                 await dlq_producer.send_and_wait(
                     settings.kafka_topic_dlq,
