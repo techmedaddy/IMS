@@ -19,4 +19,8 @@ export const incidentsApi = {
   submitRca: async (id: string, payload: RCA): Promise<void> => {
     await apiClient.post(`/incidents/${id}/rca`, payload);
   },
+
+  submitNote: async (id: string, text: string): Promise<void> => {
+    await apiClient.post(`/incidents/${id}/notes`, { text });
+  },
 };

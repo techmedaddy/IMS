@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, ArrowUpRight } from 'lucide-react';
+import { Search, Filter, ArrowUpRight, X } from 'lucide-react';
 import { incidentsApi } from '@/src/api/incidents';
 import { Incident } from '@/src/types';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/src/components/ui/Table';
@@ -17,6 +17,9 @@ export function Incidents() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [severityFilter, setSeverityFilter] = useState<string>('ALL');
+  const [stateFilter, setStateFilter] = useState<string>('ALL');
   const navigate = useNavigate();
 
   const handleIncidentUpdate = useCallback((updatedIncident: Incident) => {
@@ -54,11 +57,15 @@ export function Incidents() {
     fetchIncidents();
   }, []);
 
-  const filtered = incidents.filter(i =>
-    i.component_id.toLowerCase().includes(search.toLowerCase()) ||
-    i.id.toLowerCase().includes(search.toLowerCase()) ||
-    i.state.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = incidents.filter(i => {
+    const matchesSearch = i.component_id.toLowerCase().includes(search.toLowerCase()) || 
+                          i.id.toLowerCase().includes(search.toLowerCase());
+    const matchesSeverity = severityFilter === 'ALL' || i.severity === severityFilter;
+    const matchesState = stateFilter === 'ALL' || i.state === stateFilter;
+    return matchesSearch && matchesSeverity && matchesState;
+  });
+
+  const activeFilterCount = (severityFilter !== 'ALL' ? 1 : 0) + (stateFilter !== 'ALL' ? 1 : 0);
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -70,11 +77,73 @@ export function Incidents() {
         <div className="flex gap-2">
           <div className="relative">
             <Search className="absolute left-2.5 top-[7px] h-3.5 w-3.5 text-[var(--color-text-ghost)]" />
-            <Input placeholder="Search…" className="pl-8 w-56 h-8 text-[12px]" value={search} onChange={e => setSearch(e.target.value)} />
+            <Input placeholder="Search ID or Component…" className="pl-8 w-56 h-8 text-[12px]" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <button className="inline-flex items-center gap-1.5 px-2.5 h-8 border border-[var(--color-border-default)] rounded-md bg-[var(--color-surface-raised)] hover:bg-[var(--color-surface-hover)] text-[12px] text-[var(--color-text-secondary)] transition-colors">
-            <Filter className="w-3 h-3" /> Filter
-          </button>
+          <div className="relative">
+            <button 
+              onClick={() => setShowFilters(!showFilters)}
+              className={`inline-flex items-center gap-1.5 px-2.5 h-8 border rounded-md text-[12px] transition-colors ${
+                activeFilterCount > 0 
+                  ? 'border-[var(--color-brand)]/50 bg-[var(--color-brand)]/10 text-[var(--color-brand)]' 
+                  : 'border-[var(--color-border-default)] bg-[var(--color-surface-raised)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]'
+              }`}
+            >
+              <Filter className="w-3 h-3" /> 
+              Filter
+              {activeFilterCount > 0 && (
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--color-brand)] text-[9px] text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            
+            {showFilters && (
+              <div className="absolute right-0 mt-2 w-64 p-4 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-base)] shadow-lg z-50">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-[13px] font-semibold">Filters</h4>
+                  {activeFilterCount > 0 && (
+                    <button 
+                      onClick={() => { setSeverityFilter('ALL'); setStateFilter('ALL'); }}
+                      className="text-[11px] text-[var(--color-text-ghost)] hover:text-[var(--color-text-primary)]"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">Severity</label>
+                    <select 
+                      value={severityFilter}
+                      onChange={e => setSeverityFilter(e.target.value)}
+                      className="w-full h-8 px-2 text-[12px] bg-[var(--color-surface-overlay)] border border-[var(--color-border-subtle)] rounded outline-none"
+                    >
+                      <option value="ALL">All Severities</option>
+                      <option value="P0">P0 - Critical</option>
+                      <option value="P1">P1 - High</option>
+                      <option value="P2">P2 - Medium</option>
+                      <option value="P3">P3 - Low</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">State</label>
+                    <select 
+                      value={stateFilter}
+                      onChange={e => setStateFilter(e.target.value)}
+                      className="w-full h-8 px-2 text-[12px] bg-[var(--color-surface-overlay)] border border-[var(--color-border-subtle)] rounded outline-none"
+                    >
+                      <option value="ALL">All States</option>
+                      <option value="OPEN">Open</option>
+                      <option value="INVESTIGATING">Investigating</option>
+                      <option value="RESOLVED">Resolved</option>
+                      <option value="CLOSED">Closed</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <Card>

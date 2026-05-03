@@ -27,10 +27,22 @@ export interface RCA {
   prevention_steps: string;
 }
 
+export interface IncidentEvent {
+  id: string;
+  work_item_id: string;
+  event_type: 'STATE_CHANGE' | 'RCA_SUBMITTED' | 'CREATED' | 'NOTE_ADDED' | 'SLA_BREACH' | string;
+  prev_state: string | null;
+  new_state: string | null;
+  actor: string;
+  detail: string | null;
+  timestamp: string;
+}
+
 export interface IncidentDetail {
   incident: Incident;
   signals: Signal[];
   rca: RCA | null;
+  timeline: IncidentEvent[];
 }
 
 export interface TransitionPayload {

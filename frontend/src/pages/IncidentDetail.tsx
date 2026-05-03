@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Terminal, CheckCircle2, History, AlertCircle, Clock, FileText } from 'lucide-react';
+import { ChevronLeft, Terminal, CheckCircle2, History, AlertCircle, Clock, FileText, Activity } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { incidentsApi } from '@/src/api/incidents';
@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/src/components/ui/Ta
 import { Input, Textarea, Label } from '@/src/components/ui/Form';
 import { format } from 'date-fns';
 import { cn } from '@/src/lib/utils';
+import { Timeline } from '@/src/components/ui/Timeline';
 
 export function IncidentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +24,8 @@ export function IncidentDetailPage() {
     start_time: '', end_time: '', root_cause_category: 'Code Bug', fix_applied: '', prevention_steps: '',
   });
   const [submittingRca, setSubmittingRca] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [submittingNote, setSubmittingNote] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -71,6 +74,22 @@ export function IncidentDetailPage() {
     } finally { setSubmittingRca(false); }
   };
 
+  const handleNoteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !noteText.trim()) return;
+    setSubmittingNote(true);
+    try {
+      await incidentsApi.submitNote(id, noteText);
+      const updated = await incidentsApi.get(id);
+      setData(updated);
+      setNoteText('');
+      toast.success("Note added");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to add note.");
+    } finally { setSubmittingNote(false); }
+  };
+
   if (loading) return <div className="p-8 text-[var(--color-text-tertiary)] text-[13px] animate-pulse">Loading incident…</div>;
   if (!data) return <div className="p-8 text-[var(--color-text-tertiary)]">Incident not found.</div>;
 
@@ -107,6 +126,9 @@ export function IncidentDetailPage() {
             <TabsList>
               <TabsTrigger isActive={activeTab === 'signals'} onClick={() => setActiveTab('signals')}>
                 <Terminal className="w-3 h-3 mr-1.5" /> Signals
+              </TabsTrigger>
+              <TabsTrigger isActive={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')}>
+                <Activity className="w-3 h-3 mr-1.5" /> Timeline
               </TabsTrigger>
               <TabsTrigger isActive={activeTab === 'rca'} onClick={() => setActiveTab('rca')}>
                 <CheckCircle2 className="w-3 h-3 mr-1.5" /> Root Cause Analysis
@@ -150,6 +172,32 @@ export function IncidentDetailPage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent className={activeTab === 'timeline' ? 'block' : 'hidden'}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-[14px]">Audit Log</CardTitle>
+                  <CardDescription>Permanent record of state transitions and collaborative notes.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <Timeline events={data?.timeline || []} />
+                  
+                  <div className="pt-4 border-t border-[var(--color-border-subtle)]">
+                    <form onSubmit={handleNoteSubmit} className="flex gap-3">
+                      <Input 
+                        placeholder="Add an operator note..." 
+                        value={noteText} 
+                        onChange={e => setNoteText(e.target.value)} 
+                        className="flex-1"
+                      />
+                      <Button type="submit" disabled={submittingNote || !noteText.trim()}>
+                        {submittingNote ? 'Adding...' : 'Add Note'}
+                      </Button>
+                    </form>
                   </div>
                 </CardContent>
               </Card>
