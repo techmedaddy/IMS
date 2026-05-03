@@ -10,6 +10,7 @@ import { IncidentDetailPage } from './pages/IncidentDetail';
 import { Incidents } from './pages/Incidents';
 import { Analytics } from './pages/Analytics';
 import { Toaster } from 'react-hot-toast';
+import { GlobalToasts } from './components/GlobalToasts';
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         </Routes>
       </AppLayout>
       <Toaster position="top-right" />
+      <GlobalToasts />
     </Router>
   );
 }
