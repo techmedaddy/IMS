@@ -1,0 +1,3 @@
+sentinelims.sytes.net {
+    reverse_proxy frontend:80
+}

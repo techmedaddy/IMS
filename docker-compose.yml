@@ -162,14 +162,27 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    ports:
-      - "80:80"
     depends_on:
       api:
         condition: service_healthy
+
+  caddy:
+    image: caddy:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
 
 volumes:
   pg_data:
   mongo_data:
   redis_data:
   redpanda_data:
+  caddy_data:
+  caddy_config:
