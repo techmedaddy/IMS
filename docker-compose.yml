@@ -158,6 +158,16 @@ services:
       api:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   pg_data:
   mongo_data:
