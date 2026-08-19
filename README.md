@@ -13,28 +13,28 @@ The architecture relies heavily on event-driven principles, decoupling fast inge
 ```mermaid
 flowchart TD
     subgraph External
-        E1[External Apps<br/>e.g. PayEazie] -- "POST /api/signals" --> API
+        E1["External Apps<br/>e.g. PayEazie"] -- "POST /api/signals" --> API
     end
 
     subgraph "Dockerized Environment (Linode VPS)"
         subgraph Proxy
-            CADDY[Caddy Reverse Proxy<br/>Port 80/443 + SSL]
+            CADDY["Caddy Reverse Proxy<br/>Port 80/443 + SSL"]
         end
 
         subgraph "Frontend UI"
-            REACT[React + Vite SPA<br/>Nginx]
+            REACT["React + Vite SPA<br/>Nginx"]
         end
 
         subgraph Backend
-            API[FastAPI Server<br/>Async Ingestion]
-            WORKER[Python Worker<br/>Async Processing]
+            API["FastAPI Server<br/>Async Ingestion"]
+            WORKER["Python Worker<br/>Async Processing"]
         end
 
         subgraph Persistence
-            KAFKA[(Redpanda/Kafka)<br/>ims.signals buffer]
-            REDIS[(Redis)<br/>Debounce, Rate Limit, Pub/Sub]
-            MONGO[(MongoDB)<br/>Raw Telemetry Dump]
-            PG[(PostgreSQL)<br/>Incident State & RCA]
+            KAFKA[("Redpanda/Kafka<br/>ims.signals buffer")]
+            REDIS[("Redis<br/>Debounce, Rate Limit, Pub/Sub")]
+            MONGO[("MongoDB<br/>Raw Telemetry Dump")]
+            PG[("PostgreSQL<br/>Incident State & RCA")]
         end
 
         CADDY -- "/*" --> REACT
